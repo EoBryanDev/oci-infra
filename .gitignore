@@ -2,6 +2,9 @@
 *.tfstate
 *.tfstate.*
 
+# Arquivo de backend oculto
+backend.hcl
+
 # Diretórios internos do Terraform
 .terraform/
 .terraform.lock.hcl
