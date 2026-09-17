@@ -1,0 +1,16 @@
+# Arquivos de Estado do Terraform (Contêm sua infraestrutura em texto puro, incluindo IPs e senhas)
+*.tfstate
+*.tfstate.*
+
+# Diretórios internos do Terraform
+.terraform/
+.terraform.lock.hcl
+
+# Arquivos de Variáveis Sensíveis
+*.tfvars
+.env
+
+# Chaves SSH e Certificados da Oracle
+*.pem
+*.pub
+id_rsa*
