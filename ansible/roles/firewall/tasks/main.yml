@@ -1,0 +1,20 @@
+---
+- name: Configurar Firewall OS (Oracle/Ubuntu) para permitir K3s
+  ansible.builtin.iptables:
+    chain: "{{ item.chain }}"
+    source: "{{ item.source }}"
+    jump: ACCEPT
+    action: insert
+    rule_num: 1
+  loop:
+    - { chain: "INPUT", source: "10.42.0.0/16" }
+    - { chain: "FORWARD", source: "10.42.0.0/16" }
+    - { chain: "INPUT", source: "10.43.0.0/16" }
+    - { chain: "FORWARD", source: "10.43.0.0/16" }
+    - { chain: "INPUT", source: "10.0.1.0/24" }
+
+- name: Salvar regras do firewall local para persistir após reboot
+  ansible.builtin.shell: iptables-save > /etc/iptables/rules.v4
+  args:
+    creates: /etc/iptables/rules.v4.bak
+  ignore_errors: true
