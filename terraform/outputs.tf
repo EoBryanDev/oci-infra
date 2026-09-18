@@ -28,3 +28,11 @@ output "github_secret_OCI_PRIVATE_KEY" {
   value       = tls_private_key.pipeline_key.private_key_pem
   sensitive   = true 
 }
+
+resource "local_file" "ansible_inventory" {
+  content = templatefile("${path.module}/templates/inventory.tpl", {
+    master_ip = oci_core_instance.k3s_master.public_ip
+    worker_ip = oci_core_instance.k3s_worker.public_ip
+  })
+  filename = "${path.module}/../ansible/inventory/hosts.ini"
+}
