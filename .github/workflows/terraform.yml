@@ -1,0 +1,48 @@
+name: "Terraform OCI Pipeline"
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Ação (plan ou apply)"
+        required: true
+        default: "plan"
+        type: choice
+        options:
+          - plan
+          - apply
+
+jobs:
+  terraform:
+    name: "Terraform Exec"
+    runs-on: ubuntu-latest
+
+    env:
+      OCI_TENANCY_OCID: ${{ secrets.OCI_TENANCY_OCID }}
+      OCI_USER_OCID: ${{ secrets.OCI_USER_OCID }}
+      OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+      OCI_REGION: ${{ secrets.OCI_REGION }}
+      OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
+
+    steps:
+      - name: "Checkout do código"
+        uses: actions/checkout@v4
+
+      - name: "Setup Terraform"
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.5.0"
+
+      - name: "Terraform Init"
+        run: |
+          terraform init \
+            -backend-config="address=${{ secrets.TF_BACKEND_PAR_URL }}" \
+            -backend-config="update_method=PUT"
+
+      - name: "Terraform Plan"
+        if: github.event.inputs.action == 'plan'
+        run: terraform plan
+
+      - name: "Terraform Apply"
+        if: github.event.inputs.action == 'apply'
+        run: terraform apply -auto-approve
