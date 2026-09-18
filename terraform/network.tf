@@ -56,6 +56,11 @@ resource "oci_core_security_list" "k3s_sec_list" {
       max = 443
     }
   }
+  ingress_security_rules {
+    source      = "10.0.0.0/16"
+    protocol    = "all"
+    description = "Comunicacao interna do cluster K3s"
+  }
 }
 
 resource "oci_core_subnet" "k3s_subnet" {
