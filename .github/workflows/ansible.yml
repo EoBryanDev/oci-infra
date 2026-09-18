@@ -70,7 +70,7 @@ jobs:
           TF_VAR_compartment_id: ${{ secrets.TF_VAR_COMPARTMENT_ID }}
           TF_VAR_ssh_public_key: ${{ secrets.TF_VAR_SSH_PUBLIC_KEY }}
           TF_VAR_meu_ip: ${{ secrets.TF_VAR_MEU_IP }}
-          TF_VAR_MEU_IP_ADM: ${{ secrets.TF_VAR_MEU_IP_ADM }}
+          TF_VAR_meu_ip_adm: ${{ secrets.TF_VAR_MEU_IP_ADM }}
           TF_VAR_availability_domain: ${{ vars.TF_VAR_AVAILABILITY_DOMAIN }}
           TF_VAR_image_id: ${{ vars.TF_VAR_IMAGE_ID }}
         run: terraform ${{ github.event.inputs.acao_terraform }} -auto-approve -input=false
