@@ -61,7 +61,7 @@ resource "oci_core_security_list" "k3s_sec_list" {
 resource "oci_core_subnet" "k3s_subnet" {
   compartment_id    = var.compartment_id
   vcn_id            = oci_core_vcn.k3s_vcn.id
-  cidr_block        = "10.0.1.0/24"
+  cidr_block        = "10.0.0.0/24"
   route_table_id    = oci_core_route_table.public_rt.id
   security_list_ids = [oci_core_security_list.k3s_sec_list.id]
 }
