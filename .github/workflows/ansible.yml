@@ -54,8 +54,7 @@ jobs:
         run: |
           terraform init \
             -backend-config="address=${{ secrets.TF_BACKEND_PAR_URL }}" \
-            -backend-config="update_address=${{ secrets.TF_BACKEND_PAR_URL }}" \
-            -backend-config="unlock_address=${{ secrets.TF_BACKEND_PAR_URL }}"
+            -backend-config="update_method=PUT"
 
       - name: Executar Terraform (${{ github.event.inputs.acao_terraform }})
         working-directory: ./terraform
