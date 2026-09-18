@@ -26,6 +26,18 @@ jobs:
       OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
       OCI_REGION: ${{ secrets.OCI_REGION }}
       OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
+      # Variáveis do Projeto (Injetadas)
+      TF_VAR_availability_domain: ${{ vars.AVAILABILITY_DOMAIN }}
+      TF_VAR_image_id: ${{ vars.IMAGE_ID }}
+
+      TF_VAR_compartment_id: ${{ secrets.COMPARTMENT_ID }}
+      TF_VAR_ssh_public_key: ${{ secrets.SSH_PUBLIC_KEY }}
+      TF_VAR_meu_ip: ${{ secrets.MEU_IP }}
+
+      # Configurações de Hardware (Não sensíveis, hardcoded)
+      TF_VAR_instance_shape: "VM.Standard.A1.Flex"
+      TF_VAR_ocpus_per_node: 2
+      TF_VAR_memory_per_node: 12
 
     steps:
       - name: "Checkout do código"
@@ -44,8 +56,8 @@ jobs:
 
       - name: "Terraform Plan"
         if: github.event.inputs.action == 'plan'
-        run: terraform plan
+        run: terraform plan -input=false
 
       - name: "Terraform Apply"
         if: github.event.inputs.action == 'apply'
-        run: terraform apply -auto-approve
+        run: terraform apply -auto-approve -input=false
