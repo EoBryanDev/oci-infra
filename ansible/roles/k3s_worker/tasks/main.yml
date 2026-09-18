@@ -1,0 +1,6 @@
+---
+- name: Instalar K3s Worker e ingressar no Cluster
+  shell: |
+    curl -sfL https://get.k3s.io | K3S_URL=https://{{ hostvars['master-node']['ansible_default_ipv4']['address'] }}:6443 K3S_TOKEN={{ hostvars['master-node']['k3s_token'] }} sh -
+  args:
+    creates: /usr/local/bin/k3s

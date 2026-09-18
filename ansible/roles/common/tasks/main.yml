@@ -1,0 +1,26 @@
+---
+- name: Atualizar cache do APT
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Instalar pacotes essenciais
+  apt:
+    name:
+      - curl
+      - git
+      - ufw
+      - open-iscsi # Necessário futuramente para gerenciar volumes/storage
+      - iptables-persistent
+    state: present
+
+- name: Liberar tráfego interno no iptables (Exigência OCI)
+  iptables:
+    chain: INPUT
+    action: insert
+    rule_num: 1
+    source: 10.0.0.0/16 # Cobre toda a sua VCN
+    jump: ACCEPT
+
+- name: Salvar regras do firewall
+  command: netfilter-persistent save
