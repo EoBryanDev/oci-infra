@@ -1,38 +1,72 @@
-name: Infra & K3s Deploy
+name: Deploy Infra (OCI) e K3s
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
+    inputs:
+      acao_terraform:
+        description: "Ação da Infraestrutura (Terraform)"
+        required: true
+        default: "apply"
+        type: choice
+        options:
+          - apply
+          - destroy
+      rodar_ansible:
+        description: "Executar configuração do K3s (Ansible)?"
+        required: true
+        default: true
+        type: boolean
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repo
+      - name: Checkout do Repositório
         uses: actions/checkout@v3
 
-      - name: Setup Terraform
+      - name: Preparar Chaves e Autenticação OCI/SSH
+        run: |
+          mkdir -p ~/.ssh ~/.oci
+
+          # 1. Chave SSH (Ansible -> VMs)
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/oracle_k3s
+          chmod 400 ~/.ssh/oracle_k3s
+
+          # 2. Chave API OCI (Terraform -> Oracle)
+          echo "${{ secrets.OCI_PRIVATE_KEY }}" > ~/.oci/oci_api_key.pem
+          chmod 400 ~/.oci/oci_api_key.pem
+
+          # 3. Criar arquivo de config OCI para o Terraform ler
+          cat <<EOF > ~/.oci/config
+          [DEFAULT]
+          user=${{ secrets.OCI_USER_OCID }}
+          fingerprint=${{ secrets.OCI_FINGERPRINT }}
+          tenancy=${{ secrets.OCI_TENANCY_OCID }}
+          region=${{ secrets.OCI_REGION }}
+          key_file=/home/runner/.oci/oci_api_key.pem
+          EOF
+
+      - name: Instalar Terraform
         uses: hashicorp/setup-terraform@v2
 
-      - name: Terraform Init & Apply
+      - name: Terraform Init
+        working-directory: ./terraform
+        run: terraform init
+
+      - name: Executar Terraform (${{ github.event.inputs.acao_terraform }})
         working-directory: ./terraform
         env:
           TF_VAR_compartment_id: ${{ secrets.TF_VAR_COMPARTMENT_ID }}
           TF_VAR_ssh_public_key: ${{ secrets.TF_VAR_SSH_PUBLIC_KEY }}
-          # Exponha aqui as credenciais OCI (Tenancy, User, Fingerprint, Region, Private Key)
-        run: |
-          terraform init
-          terraform apply -auto-approve
-
-      - name: Configurar Chave SSH para o Ansible
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/oracle_k3s
-          chmod 400 ~/.ssh/oracle_k3s
+          TF_VAR_meu_ip: ${{ secrets.TF_VAR_MEU_IP }}
+        # O auto-approve impede que a pipeline fique travada esperando você digitar "yes"
+        run: terraform ${{ github.event.inputs.acao_terraform }} -auto-approve
 
       - name: Executar Ansible Playbook
+        # O Ansible só roda se o Terraform foi "apply" e se você marcou a caixa "rodar_ansible"
+        if: ${{ github.event.inputs.acao_terraform == 'apply' && github.event.inputs.rodar_ansible == 'true' }}
         working-directory: ./ansible
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: False
         run: |
-          export ANSIBLE_HOST_KEY_CHECKING=False
           ansible-playbook -i inventory/hosts.ini site.yml --private-key ~/.ssh/oracle_k3s
