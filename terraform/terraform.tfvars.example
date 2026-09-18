@@ -1,2 +1,12 @@
-compartment_id = "ocid1.compartment.oc1..xxxxxxxx"
-ssh_public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC..."
+compartment_id
+availability_domain
+instance_shape
+image_id
+ssh_public_key
+meu_ip
+tenancy_ocid
+user_ocid
+fingerprint
+private_key
+region
+meu_ip_adm

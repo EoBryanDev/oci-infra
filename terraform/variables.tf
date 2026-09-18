@@ -28,6 +28,11 @@ variable "instance_shape" {
   default = "VM.Standard.A1.Flex"
 }
 
+variable "meu_ip_adm" {
+  description = "IP da maquina adm para gerenciar o K3s"
+  type        = string
+}
+
 variable "tenancy_ocid" {}
 variable "user_ocid" {}
 variable "fingerprint" {}

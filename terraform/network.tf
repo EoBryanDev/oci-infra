@@ -61,6 +61,15 @@ resource "oci_core_security_list" "k3s_sec_list" {
     protocol    = "all"
     description = "Comunicacao interna do cluster K3s"
   }
+
+  ingress_security_rules {
+    source   = var.meu_ip_adm
+    protocol = "6" # TCP
+    tcp_options {
+      min = 6443
+      max = 6443
+    }
+  }
 }
 
 resource "oci_core_subnet" "k3s_subnet" {
