@@ -59,6 +59,14 @@ jobs:
       - name: Executar Terraform (${{ github.event.inputs.acao_terraform }})
         working-directory: ./terraform
         env:
+          # Variáveis de Autenticação (Faltantes)
+          TF_VAR_tenancy_ocid: ${{ secrets.OCI_TENANCY_OCID }}
+          TF_VAR_user_ocid: ${{ secrets.OCI_USER_OCID }}
+          TF_VAR_fingerprint: ${{ secrets.OCI_FINGERPRINT }}
+          TF_VAR_private_key: ${{ secrets.OCI_PRIVATE_KEY }}
+          TF_VAR_region: ${{ secrets.OCI_REGION }}
+
+          # Variáveis de Infraestrutura e Acesso
           TF_VAR_compartment_id: ${{ secrets.TF_VAR_COMPARTMENT_ID }}
           TF_VAR_ssh_public_key: ${{ secrets.TF_VAR_SSH_PUBLIC_KEY }}
           TF_VAR_meu_ip: ${{ secrets.TF_VAR_MEU_IP }}
