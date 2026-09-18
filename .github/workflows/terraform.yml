@@ -16,6 +16,9 @@ jobs:
   terraform:
     name: "Terraform Exec"
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./terraform
 
     env:
       OCI_TENANCY_OCID: ${{ secrets.OCI_TENANCY_OCID }}
