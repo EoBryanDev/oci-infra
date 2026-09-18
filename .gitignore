@@ -9,11 +9,19 @@ backend.hcl
 .terraform/
 .terraform.lock.hcl
 
+crash.log
+crash.*.log
+
 # Arquivos de Variáveis Sensíveis
 *.tfvars
+*.tfvars.json
 .env
+
+*.retry
+ansible/inventory/hosts.ini
 
 # Chaves SSH e Certificados da Oracle
 *.pem
 *.pub
+*.key
 id_rsa*
