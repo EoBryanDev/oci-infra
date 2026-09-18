@@ -1,0 +1,38 @@
+name: Infra & K3s Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+
+      - name: Terraform Init & Apply
+        working-directory: ./terraform
+        env:
+          TF_VAR_compartment_id: ${{ secrets.TF_VAR_COMPARTMENT_ID }}
+          TF_VAR_ssh_public_key: ${{ secrets.TF_VAR_SSH_PUBLIC_KEY }}
+          # Exponha aqui as credenciais OCI (Tenancy, User, Fingerprint, Region, Private Key)
+        run: |
+          terraform init
+          terraform apply -auto-approve
+
+      - name: Configurar Chave SSH para o Ansible
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/oracle_k3s
+          chmod 400 ~/.ssh/oracle_k3s
+
+      - name: Executar Ansible Playbook
+        working-directory: ./ansible
+        run: |
+          export ANSIBLE_HOST_KEY_CHECKING=False
+          ansible-playbook -i inventory/hosts.ini site.yml --private-key ~/.ssh/oracle_k3s
