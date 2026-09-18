@@ -27,3 +27,9 @@ variable "instance_shape" {
   type    = string
   default = "VM.Standard.A1.Flex"
 }
+
+variable "tenancy_ocid" {}
+variable "user_ocid" {}
+variable "fingerprint" {}
+variable "private_key" {}
+variable "region" {}
