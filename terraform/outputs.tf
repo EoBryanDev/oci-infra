@@ -30,9 +30,17 @@ output "github_secret_OCI_PRIVATE_KEY" {
 }
 
 resource "local_file" "ansible_inventory" {
-  content = templatefile("${path.module}/templates/inventory.tpl", {
-    master_ip = oci_core_instance.k3s_master.public_ip
-    worker_ip = oci_core_instance.k3s_worker.public_ip
-  })
+  content = <<-EOT
+    [k3s_master]
+    master-node ansible_host=${oci_core_instance.k3s_nodes["k3s-master"].public_ip}
+
+    [k3s_worker]
+    worker-node ansible_host=${oci_core_instance.k3s_nodes["k3s-worker"].public_ip}
+
+    [all:vars]
+    ansible_user=ubuntu
+    ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+  EOT
+  
   filename = "${path.module}/../ansible/inventory/hosts.ini"
 }
