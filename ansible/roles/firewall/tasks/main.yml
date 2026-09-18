@@ -12,6 +12,7 @@
     - { chain: "INPUT", source: "10.43.0.0/16" }
     - { chain: "FORWARD", source: "10.43.0.0/16" }
     - { chain: "INPUT", source: "10.0.1.0/24" }
+    - { chain: "INPUT", source: "{{ meu_ip_adm }}", port: "6443" }
 
 - name: Salvar regras do firewall local para persistir após reboot
   ansible.builtin.shell: iptables-save > /etc/iptables/rules.v4

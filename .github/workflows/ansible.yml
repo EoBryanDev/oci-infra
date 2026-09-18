@@ -82,4 +82,5 @@ jobs:
         env:
           ANSIBLE_HOST_KEY_CHECKING: False
         run: |
-          ansible-playbook -i inventory/hosts.ini site.yml --private-key ~/.ssh/oracle_k3s
+          ansible-playbook -i inventory/hosts.ini site.yml --private-key ~/.ssh/oracle_k3s \
+            --extra-vars "meu_ip_adm=${{ secrets.TF_VAR_MEU_IP_ADM }}"
