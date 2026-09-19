@@ -23,3 +23,10 @@ module "cloudflare" {
   argo_subdomain    = var.argo_subdomain
   grafana_subdomain = var.grafana_subdomain
 }
+
+module "finops" {
+  source = "./modules/finops"
+
+  tenancy_ocid       = var.tenancy_ocid
+  budget_alert_email = var.budget_alert_email
+}

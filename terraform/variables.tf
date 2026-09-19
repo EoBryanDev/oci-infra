@@ -75,3 +75,10 @@ variable "grafana_subdomain" {
   default     = "grafana"
   description = "Subdomínio do Grafana"
 }
+
+# --- FinOps: guardrails Always Free ---
+variable "budget_alert_email" {
+  type        = string
+  default     = "Eobryandev@gmail.com"
+  description = "E-mail dos alertas de gasto (não sensível, sem secret)"
+}
