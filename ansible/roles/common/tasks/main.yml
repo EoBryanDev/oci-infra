@@ -4,14 +4,16 @@
     update_cache: yes
     cache_valid_time: 3600
 
-- name: Instalar pacotes essenciais
+- name: Instalar pacotes essenciais e suporte a Python
   apt:
     name:
       - curl
       - git
       - ufw
-      - open-iscsi # Necessário futuramente para gerenciar volumes/storage
+      - open-iscsi
       - iptables-persistent
+      - python3-pip
+      - python3-dev
     state: present
 
 - name: Liberar tráfego interno no iptables (Exigência OCI)
@@ -19,7 +21,7 @@
     chain: INPUT
     action: insert
     rule_num: 1
-    source: 10.0.0.0/16 # Cobre toda a sua VCN
+    source: 10.0.0.0/16
     jump: ACCEPT
 
 - name: Salvar regras do firewall

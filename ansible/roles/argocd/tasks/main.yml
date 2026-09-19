@@ -1,5 +1,5 @@
 ---
-- name: Garantir que o pip e a biblioteca Python do Kubernetes estão instalados
+- name: Garantir que a biblioteca Python do Kubernetes está instalada
   ansible.builtin.pip:
     name: kubernetes
     executable: pip3
