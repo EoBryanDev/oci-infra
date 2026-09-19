@@ -51,6 +51,8 @@ spec:
                   period: 24h
           compactor:
             retention_enabled: true
+            # Obrigatório quando retention está ligada (erro: delete-request-store).
+            delete_request_store: filesystem
           limits_config:
             retention_period: 24h # retenção mínima (decisão: custo zero de disco)
         singleBinary:

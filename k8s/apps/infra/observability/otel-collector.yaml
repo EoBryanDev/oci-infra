@@ -51,13 +51,14 @@ spec:
               endpoint: tempo.monitoring.svc.cluster.local:4317
               tls:
                 insecure: true
-            # Logs OTLP -> Loki (push HTTP)
-            loki:
-              endpoint: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
+            # Logs OTLP -> Loki via endpoint OTLP nativo (o exporter `loki`
+            # legado saiu do contrib; Loki 3.x aceita OTLP em /otlp).
+            otlp_http/loki:
+              endpoint: http://loki.monitoring.svc.cluster.local:3100/otlp
           service:
             pipelines:
               logs:
-                exporters: [loki]
+                exporters: [otlp_http/loki]
                 processors: [memory_limiter, batch]
                 receivers: [otlp]
               metrics:
