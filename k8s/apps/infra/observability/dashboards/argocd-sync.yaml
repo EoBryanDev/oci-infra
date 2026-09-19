@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dashboard-argocd-sync
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1" # sidecar do stack importa automaticamente
+data:
+  argocd-sync.json: |-
+    {
+      "title": "ArgoCD Sync",
+      "uid": "argocd-sync",
+      "schemaVersion": 39,
+      "version": 1,
+      "time": { "from": "now-6h", "to": "now" },
+      "panels": [
+        {
+          "title": "Apps por sync status", "type": "stat",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "expr": "count by (sync_status) (argocd_app_info)" }],
+          "gridPos": { "h": 4, "w": 8, "x": 0, "y": 0 }
+        },
+        {
+          "title": "Apps por health", "type": "stat",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "expr": "count by (health_status) (argocd_app_info)" }],
+          "gridPos": { "h": 4, "w": 8, "x": 8, "y": 0 }
+        },
+        {
+          "title": "Apps fora de Synced/Healthy", "type": "table",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "expr": "argocd_app_info{sync_status!=\"Synced\"} or argocd_app_info{health_status!=\"Healthy\"}" }],
+          "gridPos": { "h": 6, "w": 8, "x": 16, "y": 0 }
+        },
+        {
+          "title": "Syncs (operações)", "type": "timeseries",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "expr": "sum by (phase) (rate(argocd_app_sync_total[5m]))" }],
+          "gridPos": { "h": 6, "w": 12, "x": 0, "y": 4 }
+        },
+        {
+          "title": "Reconciliações do controller", "type": "timeseries",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "expr": "sum by (namespace) (rate(argocd_app_reconcile_count[5m]))" }],
+          "gridPos": { "h": 6, "w": 12, "x": 12, "y": 4 }
+        }
+      ]
+    }
