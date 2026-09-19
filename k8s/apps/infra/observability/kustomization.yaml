@@ -7,3 +7,6 @@ resources:
   - tempo.yaml
   - otel-collector.yaml
   - grafana-ingressroute.yaml
+  - argocd-monitor.yaml
+  - dashboards/infra-executiva.yaml
+  - dashboards/argocd-sync.yaml
