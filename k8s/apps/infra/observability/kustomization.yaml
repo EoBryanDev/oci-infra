@@ -5,4 +5,5 @@ resources:
   - kube-prometheus.yaml
   - loki.yaml
   - tempo.yaml
-  # Onda 6: otel-collector.yaml, grafana-ingressroute.yaml.
+  - otel-collector.yaml
+  - grafana-ingressroute.yaml
