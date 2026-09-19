@@ -5,9 +5,11 @@ resource "oci_budget_budget" "free_tier" {
   amount         = var.budget_amount_brl
   reset_period   = "MONTHLY"
   description    = "Guarda-corpo Always Free: qualquer gasto fora do free dispara alerta"
-  # Alvo obrigatório (API exige): tenancy inteira via compartment root.
+  # Alvo obrigatório (API exige): o compartment de workload. A API rejeita
+  # a tenancy root como target (exemplo oficial usa compartment filho).
+  # Como 100% dos recursos do portfólio vivem nele, a cobertura é total.
   target_type = "COMPARTMENT"
-  targets     = [var.tenancy_ocid]
+  targets     = [var.compartment_id]
 }
 
 resource "oci_budget_alert_rule" "actual_spend" {

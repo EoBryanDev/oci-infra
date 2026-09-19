@@ -28,5 +28,6 @@ module "finops" {
   source = "./modules/finops"
 
   tenancy_ocid       = var.tenancy_ocid
+  compartment_id     = var.compartment_id
   budget_alert_email = var.budget_alert_email
 }

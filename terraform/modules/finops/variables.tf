@@ -3,6 +3,11 @@ variable "tenancy_ocid" {
   description = "OCID da tenancy (budgets e quotas vivem no root)"
 }
 
+variable "compartment_id" {
+  type        = string
+  description = "OCID do compartment de workload (alvo do budget)"
+}
+
 variable "budget_alert_email" {
   type        = string
   description = "E-mail que recebe os alertas de gasto (não é sensível)"
