@@ -1,3 +1,11 @@
+# --- OCI: autenticação (via secrets da pipeline, nunca commitadas) ---
+variable "tenancy_ocid" {}
+variable "user_ocid" {}
+variable "fingerprint" {}
+variable "private_key" {}
+variable "region" {}
+
+# --- OCI: infraestrutura ---
 variable "compartment_id" {
   type        = string
   description = "OCID do Compartment"
@@ -23,18 +31,41 @@ variable "meu_ip" {
   description = "Meu IP público com CIDR para liberar SSH"
 }
 
-variable "instance_shape" {
-  type    = string
-  default = "VM.Standard.A1.Flex"
-}
-
 variable "meu_ip_adm" {
   description = "IP da maquina adm para gerenciar o K3s"
   type        = string
 }
 
-variable "tenancy_ocid" {}
-variable "user_ocid" {}
-variable "fingerprint" {}
-variable "private_key" {}
-variable "region" {}
+variable "instance_shape" {
+  type    = string
+  default = "VM.Standard.A1.Flex"
+}
+
+variable "ocpus_per_node" {
+  type    = number
+  default = 2
+}
+
+variable "memory_per_node" {
+  type    = number
+  default = 12
+}
+
+# --- Cloudflare: DNS GitOps ---
+variable "cloudflare_api_token" {
+  type        = string
+  sensitive   = true
+  description = "Token API Cloudflare (template Edit zone DNS). Via secret TF_VAR_cloudflare_api_token."
+}
+
+variable "cloudflare_zone_name" {
+  type        = string
+  default     = "synit.top"
+  description = "Zona DNS na Cloudflare"
+}
+
+variable "argo_subdomain" {
+  type        = string
+  default     = "argo"
+  description = "Subdomínio do ArgoCD"
+}

@@ -41,6 +41,9 @@ jobs:
       TF_VAR_ocpus_per_node: 2
       TF_VAR_memory_per_node: 12
 
+      # Cloudflare DNS GitOps (token com permissão Edit zone DNS)
+      TF_VAR_cloudflare_api_token: ${{ secrets.TF_VAR_CLOUDFLARE_API_TOKEN }}
+
     steps:
       - name: "Checkout do código"
         uses: actions/checkout@v4

@@ -10,8 +10,8 @@ resource "oci_core_instance" "k3s_nodes" {
   shape               = var.instance_shape
 
   shape_config {
-    ocpus         = 2
-    memory_in_gbs = 12
+    ocpus         = var.ocpus_per_node
+    memory_in_gbs = var.memory_per_node
   }
 
   create_vnic_details {

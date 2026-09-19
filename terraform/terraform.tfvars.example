@@ -1,12 +1,21 @@
-compartment_id
-availability_domain
-instance_shape
-image_id
-ssh_public_key
-meu_ip
-tenancy_ocid
-user_ocid
-fingerprint
-private_key
-region
-meu_ip_adm
+# Copie para terraform.tfvars (gitignored) e preencha. Na pipeline,
+# os mesmos valores chegam via secrets TF_VAR_* (ver .github/workflows/).
+compartment_id      = "ocid1.compartment..."
+availability_domain = "Uocm:US-ASHBURN-AD-1"
+instance_shape      = "VM.Standard.A1.Flex"
+ocpus_per_node      = 2
+memory_per_node     = 12
+image_id            = "ocid1.image..."
+ssh_public_key      = "ssh-ed25519 AAAA..."
+meu_ip              = "177.65.255.109/32"
+meu_ip_adm          = "177.65.255.109/32"
+tenancy_ocid        = "ocid1.tenancy..."
+user_ocid           = "ocid1.user..."
+fingerprint         = "aa:bb:cc:..."
+private_key         = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+region              = "us-ashburn-1"
+
+# Cloudflare (token com permissão Edit zone DNS na zona abaixo)
+cloudflare_api_token   = "cf-token-..."
+cloudflare_zone_name   = "synit.top"
+argo_subdomain         = "argo"

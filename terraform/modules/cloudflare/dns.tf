@@ -1,0 +1,14 @@
+# Records gerenciados pelo Terraform. Como ainda não existem,
+# são CRIADOS (sem import). Se um dia houver records manuais para adotar,
+# usar: terraform import module.cloudflare.cloudflare_record.argo <zone_id>/<record_id>
+resource "cloudflare_record" "argo" {
+  zone_id = data.cloudflare_zone.this.id
+  name    = var.argo_subdomain
+  type    = "A"
+  value   = var.lb_public_ip
+  proxied = true # nuvem laranja: TLS da borda + Origin Cert atrás
+  ttl     = 1    # 1 = automático quando proxied
+}
+
+# Futuras apps GitOps seguem o mesmo padrão:
+# resource "cloudflare_record" "grafana" { ... name = "grafana" ... }
