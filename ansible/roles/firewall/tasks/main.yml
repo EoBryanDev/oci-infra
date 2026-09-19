@@ -1,26 +1,19 @@
 ---
-- name: Configurar Firewall OS (Oracle/Ubuntu) para permitir K3s
+- name: Garantir política ACCEPT no FORWARD (Desobstruir K3s)
   ansible.builtin.iptables:
-    chain: "{{ item.chain }}"
-    source: "{{ item.source }}"
-    protocol: "{{ item.protocol | default(omit) }}"
-    destination_port: "{{ item.port | default(omit) }}"
-    jump: ACCEPT
-    action: insert
-    rule_num: 1
-  loop:
-    - { chain: "INPUT", source: "10.42.0.0/16" }
-    - { chain: "FORWARD", source: "10.42.0.0/16" }
-    - { chain: "INPUT", source: "10.43.0.0/16" }
-    - { chain: "FORWARD", source: "10.43.0.0/16" }
-    - { chain: "INPUT", source: "10.0.0.0/16" }
-    - { chain: "FORWARD", source: "10.0.0.0/16" }
-    - {
-        chain: "INPUT",
-        source: "{{ meu_ip_adm }}",
-        protocol: "tcp",
-        port: "6443",
-      }
+    chain: FORWARD
+    policy: ACCEPT
 
-- name: Salvar regras do firewall local para persistir após reboot
+- name: Limpar firewall nativo conflitante da Oracle
+  ansible.builtin.command: iptables -F
+
+- name: Garantir acesso à API do K3s apenas para o IP do Administrador
+  ansible.builtin.iptables:
+    chain: INPUT
+    protocol: tcp
+    source: "{{ meu_ip_adm }}"
+    destination_port: "6443"
+    jump: ACCEPT
+
+- name: Salvar estado do firewall
   ansible.builtin.command: netfilter-persistent save
