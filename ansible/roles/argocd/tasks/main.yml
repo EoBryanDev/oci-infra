@@ -1,6 +1,6 @@
 ---
 - name: Criar o namespace do ArgoCD
-  command: kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+  shell: kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
 
 - name: Instalar o ArgoCD via manifesto oficial estavel
   command: kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
