@@ -35,6 +35,12 @@
   roles:
     - telegram
 
+- name: Credenciais S3 do backup do Postgres (CNPG barman)
+  hosts: k3s_master
+  become: true
+  roles:
+    - pgbackup
+
 - name: Instalação e Configuração do ArgoCD (GitOps)
   hosts: k3s_master
   become: true

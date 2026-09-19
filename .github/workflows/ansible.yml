@@ -89,7 +89,10 @@ jobs:
           KEY_B64=$(printf '%s' "${{ secrets.CF_ORIGIN_KEY }}" | base64 -w0)
           TG_TOKEN_B64=$(printf '%s' "${{ secrets.TELEGRAM_TOKEN }}" | base64 -w0)
           TG_CHAT_B64=$(printf '%s' "${{ secrets.TELEGRAM_CHAT_ID }}" | base64 -w0)
+          S3_AK_B64=$(printf '%s' "${{ secrets.S3_BACKUP_ACCESS_KEY }}" | base64 -w0)
+          S3_SK_B64=$(printf '%s' "${{ secrets.S3_BACKUP_SECRET_KEY }}" | base64 -w0)
           ansible-playbook -i inventory/hosts.ini site.yml --private-key ~/.ssh/oracle_k3s \
             --extra-vars "meu_ip_adm=${{ secrets.TF_VAR_MEU_IP_ADM }}" \
             --extra-vars "cf_origin_cert_b64=${CERT_B64} cf_origin_key_b64=${KEY_B64}" \
-            --extra-vars "telegram_token_b64=${TG_TOKEN_B64} telegram_chat_id_b64=${TG_CHAT_B64}"
+            --extra-vars "telegram_token_b64=${TG_TOKEN_B64} telegram_chat_id_b64=${TG_CHAT_B64}" \
+            --extra-vars "s3_access_key_b64=${S3_AK_B64} s3_secret_key_b64=${S3_SK_B64}"

@@ -1,0 +1,28 @@
+---
+# Cria o Secret S3 do backup do Postgres (CNPG barman) sem expor valores.
+# Entrada: s3_access_key_b64 / s3_secret_key_b64 (base64, via --extra-vars).
+# Na pipe, o workflow gera o b64 a partir dos secrets S3_BACKUP_ACCESS_KEY/SECRET.
+# Chaves esperadas pelo CNPG: ACCESS_KEY_ID + SECRET_ACCESS_KEY.
+- name: Validar que as credenciais S3 foram informadas
+  fail:
+    msg: "s3_access_key_b64 e s3_secret_key_b64 são obrigatórios (ver workflow ansible.yml)"
+  when: s3_access_key_b64 is not defined or s3_secret_key_b64 is not defined
+        or (s3_access_key_b64 | length) == 0 or (s3_secret_key_b64 | length) == 0
+
+- name: Criar Secret S3 do backup no namespace databases (idempotente)
+  shell: |
+    set -e
+    umask 077
+    trap 'rm -f /tmp/s3-ak /tmp/s3-sk' EXIT
+    echo "$S3_AK" > /tmp/s3-ak
+    echo "$S3_SK" > /tmp/s3-sk
+    kubectl create namespace databases --dry-run=client -o yaml | kubectl apply -f -
+    kubectl -n databases create secret generic pg-backup-s3 \
+      --from-file=ACCESS_KEY_ID=/tmp/s3-ak \
+      --from-file=SECRET_ACCESS_KEY=/tmp/s3-sk \
+      --dry-run=client -o yaml | kubectl apply -f -
+  environment:
+    S3_AK: "{{ s3_access_key_b64 | b64decode }}"
+    S3_SK: "{{ s3_secret_key_b64 | b64decode }}"
+  no_log: true
+  changed_when: false
