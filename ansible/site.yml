@@ -22,3 +22,9 @@
   become: true
   roles:
     - k3s_worker
+
+- name: Instalação e Configuração do ArgoCD (GitOps)
+  hosts: k3s_master
+  become: true
+  roles:
+    - argocd
