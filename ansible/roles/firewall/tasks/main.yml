@@ -13,7 +13,8 @@
     - { chain: "FORWARD", source: "10.42.0.0/16" }
     - { chain: "INPUT", source: "10.43.0.0/16" }
     - { chain: "FORWARD", source: "10.43.0.0/16" }
-    - { chain: "INPUT", source: "10.0.0.0/16" } # Ajustado para bater com a VCN do Terraform
+    - { chain: "INPUT", source: "10.0.0.0/16" }
+    - { chain: "FORWARD", source: "10.0.0.0/16" }
     - {
         chain: "INPUT",
         source: "{{ meu_ip_adm }}",
