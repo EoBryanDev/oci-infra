@@ -3,5 +3,6 @@ kind: Kustomization
 resources:
   - ns.yaml
   - kube-prometheus.yaml
-  # Onda 5+: loki.yaml, tempo.yaml, otel-collector.yaml,
-  # grafana-ingressroute.yaml (1 Application Helm por componente, ordem de dependência).
+  - loki.yaml
+  - tempo.yaml
+  # Onda 6: otel-collector.yaml, grafana-ingressroute.yaml.
