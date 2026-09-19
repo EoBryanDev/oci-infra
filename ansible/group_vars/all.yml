@@ -1,0 +1,11 @@
+---
+# Variáveis globais — sobrescreva via --extra-vars "meu_ip_adm=1.2.3.4/32" no CI
+# Formato esperado: CIDR, ex: "177.65.255.109/32"
+meu_ip_adm: "{{ lookup('env', 'MEU_IP_ADM') | default('127.0.0.1/32', true) }}"
+
+# Rede interna OCI (VCN)
+rede_interna: "10.0.0.0/16"
+
+# Versão pinada do ArgoCD (evita drift entre applies)
+argocd_version: "v2.11.3"
+argocd_manifest_url: "https://raw.githubusercontent.com/argoproj/argo-cd/{{ argocd_version }}/manifests/install.yaml"

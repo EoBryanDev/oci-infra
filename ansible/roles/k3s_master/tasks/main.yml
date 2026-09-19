@@ -1,11 +1,23 @@
 ---
-- name: Instalar K3s Master
+# Anota o IP privado para usar como advertise-address (evita endpoint
+# kubernetes 10.43.0.1 -> IP público, que quebra pod->API com i/o timeout).
+- name: Descobrir IP privado do master
+  set_fact:
+    k3s_private_ip: "{{ ansible_default_ipv4.address }}"
+    k3s_public_ip: "{{ ansible_host }}"
+
+- name: Instalar K3s Master (idempotente via config, não via creates)
   shell: |
     curl -sfL https://get.k3s.io | sh -s - server \
       --write-kubeconfig-mode 644 \
-      --node-external-ip {{ ansible_host }}
+      --node-ip {{ k3s_private_ip }} \
+      --advertise-address {{ k3s_private_ip }} \
+      --node-external-ip {{ k3s_public_ip }} \
+      --tls-san {{ k3s_public_ip }} \
+      --tls-san {{ k3s_private_ip }} \
+      --flannel-iface {{ ansible_default_ipv4.interface }}
   args:
-    creates: /usr/local/bin/k3s # Impede que o Ansible reinstale se já existir
+    creates: /etc/rancher/k3s/k3s.yaml
 
 - name: Aguardar a geração do Token do Cluster
   wait_for:

@@ -1,13 +1,18 @@
 ---
+# NUNCA usar iptables -F aqui: apaga chains do K3s/Flannel/kube-proxy e quebra
+# o acesso pod -> ClusterIP (10.43.0.1:443), causando i/o timeout no ArgoCD.
 - name: Garantir política ACCEPT no FORWARD (Desobstruir K3s)
   ansible.builtin.iptables:
     chain: FORWARD
     policy: ACCEPT
 
-- name: Limpar firewall nativo conflitante da Oracle
-  ansible.builtin.command: iptables -F
+- name: Liberar tráfego interno do cluster (VCN OCI)
+  ansible.builtin.iptables:
+    chain: INPUT
+    source: "{{ rede_interna | default('10.0.0.0/16') }}"
+    jump: ACCEPT
 
-- name: Garantir acesso à API do K3s apenas para o IP do Administrador
+- name: Garantir acesso à API do K3s para o IP do Administrador
   ansible.builtin.iptables:
     chain: INPUT
     protocol: tcp
@@ -15,5 +20,30 @@
     destination_port: "6443"
     jump: ACCEPT
 
+- name: Garantir acesso à API do K3s a partir da rede interna (worker -> master)
+  ansible.builtin.iptables:
+    chain: INPUT
+    protocol: tcp
+    source: "{{ rede_interna | default('10.0.0.0/16') }}"
+    destination_port: "6443"
+    jump: ACCEPT
+
+- name: Liberar VXLAN do Flannel entre nodes (8472/udp)
+  ansible.builtin.iptables:
+    chain: INPUT
+    protocol: udp
+    source: "{{ rede_interna | default('10.0.0.0/16') }}"
+    destination_port: "8472"
+    jump: ACCEPT
+
+- name: Liberar Kubelet entre nodes (10250/tcp)
+  ansible.builtin.iptables:
+    chain: INPUT
+    protocol: tcp
+    source: "{{ rede_interna | default('10.0.0.0/16') }}"
+    destination_port: "10250"
+    jump: ACCEPT
+
 - name: Salvar estado do firewall
   ansible.builtin.command: netfilter-persistent save
+  changed_when: false

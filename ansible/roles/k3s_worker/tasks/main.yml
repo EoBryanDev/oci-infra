@@ -1,6 +1,14 @@
 ---
+# Worker SEMPRE via IP privado do master (10.0.0.0/16 liberado no SG + iptables).
+# Usar IP público aqui causa timeout (SG só libera 6443 p/ MEU_IP_ADM).
 - name: Instalar K3s Worker e ingressar no Cluster
   shell: |
-    curl -sfL https://get.k3s.io | K3S_URL=https://{{ hostvars['master-node']['ansible_default_ipv4']['address'] }}:6443 K3S_TOKEN={{ hostvars['master-node']['k3s_token'] }} sh -
+    curl -sfL https://get.k3s.io | \
+      K3S_URL=https://{{ hostvars['master-node']['ansible_default_ipv4']['address'] }}:6443 \
+      K3S_TOKEN={{ hostvars['master-node']['k3s_token'] }} \
+      sh -s - agent \
+        --node-ip {{ ansible_default_ipv4.address }} \
+        --flannel-iface {{ ansible_default_ipv4.interface }}
   args:
-    creates: /usr/local/bin/k3s
+    creates: /etc/rancher/k3s/k3s.yaml
+  when: hostvars['master-node']['k3s_token'] is defined
