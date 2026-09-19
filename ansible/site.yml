@@ -29,6 +29,12 @@
   roles:
     - tls
 
+- name: Segredos de notificação (Telegram) para o monitoramento
+  hosts: k3s_master
+  become: true
+  roles:
+    - telegram
+
 - name: Instalação e Configuração do ArgoCD (GitOps)
   hosts: k3s_master
   become: true

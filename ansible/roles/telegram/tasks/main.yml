@@ -1,0 +1,29 @@
+---
+# Cria o Secret do bot Telegram para o Alertmanager, sem expor valores.
+# Entrada: telegram_token_b64 / telegram_chat_id_b64 (base64, via --extra-vars).
+# Na pipe, o workflow gera o b64 a partir dos secrets TELEGRAM_TOKEN/CHAT_ID.
+# O Secret é montado no Alertmanager via `alertmanager.secrets` do chart
+# (arquivos em /etc/alertmanager/secrets/alertmanager-telegram/).
+- name: Validar que token e chat id foram informados
+  fail:
+    msg: "telegram_token_b64 e telegram_chat_id_b64 são obrigatórios (ver workflow ansible.yml)"
+  when: telegram_token_b64 is not defined or telegram_chat_id_b64 is not defined
+        or (telegram_token_b64 | length) == 0 or (telegram_chat_id_b64 | length) == 0
+
+- name: Criar Secret do Telegram no namespace monitoring (idempotente)
+  shell: |
+    set -e
+    umask 077
+    trap 'rm -f /tmp/tg-token /tmp/tg-chat' EXIT
+    echo "$TG_TOKEN" > /tmp/tg-token
+    echo "$TG_CHAT" > /tmp/tg-chat
+    kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
+    kubectl -n monitoring create secret generic alertmanager-telegram \
+      --from-file=token=/tmp/tg-token \
+      --from-file=chat_id=/tmp/tg-chat \
+      --dry-run=client -o yaml | kubectl apply -f -
+  environment:
+    TG_TOKEN: "{{ telegram_token_b64 | b64decode }}"
+    TG_CHAT: "{{ telegram_chat_id_b64 | b64decode }}"
+  no_log: true
+  changed_when: false
