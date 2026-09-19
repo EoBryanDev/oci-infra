@@ -63,6 +63,9 @@ spec:
           config:
             global:
               resolve_timeout: 5m
+            # Carrega telegram.tmpl (templateFiles do chart cai neste dir).
+            templates:
+              - /etc/alertmanager/config/*.tmpl
             route:
               group_by: ["alertname", "namespace"]
               group_wait: 30s
