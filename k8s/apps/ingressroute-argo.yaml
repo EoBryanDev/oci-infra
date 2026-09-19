@@ -1,0 +1,33 @@
+---
+# O argocd-server roda SEM --insecure: a porta HTTP (:80) só responde 307
+# para HTTPS, o que gerava loop infinito atrás do proxy.
+# Por isso o backend vai em :443 (HTTPS real) e o Traefik aceita o cert
+# self-signed do Argo via ServersTransport (só existe via CRD, não via
+# annotation de Ingress comum).
+apiVersion: traefik.io/v1alpha1
+kind: ServersTransport
+metadata:
+  name: argo-insecure
+  namespace: argocd
+spec:
+  serverName: argo.synit.top
+  insecureSkipVerify: true
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: argocd-server
+  namespace: argocd
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`argo.synit.top`)
+      kind: Rule
+      services:
+        - name: argocd-server
+          port: 443
+          scheme: https
+          serversTransport: argo-insecure
+  tls:
+    secretName: argo-origin-tls # Origin Cert (role Ansible `tls`), nunca commitado
