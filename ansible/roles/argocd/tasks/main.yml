@@ -1,4 +1,10 @@
 ---
+- name: Garantir que o pip e a biblioteca Python do Kubernetes estão instalados
+  ansible.builtin.pip:
+    name: kubernetes
+    executable: pip3
+    state: present
+
 - name: Criar o namespace do ArgoCD
   kubernetes.core.k8s:
     name: argocd
