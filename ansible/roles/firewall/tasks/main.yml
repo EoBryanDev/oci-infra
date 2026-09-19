@@ -3,6 +3,8 @@
   ansible.builtin.iptables:
     chain: "{{ item.chain }}"
     source: "{{ item.source }}"
+    protocol: "{{ item.protocol | default(omit) }}"
+    destination_port: "{{ item.port | default(omit) }}"
     jump: ACCEPT
     action: insert
     rule_num: 1
@@ -11,11 +13,13 @@
     - { chain: "FORWARD", source: "10.42.0.0/16" }
     - { chain: "INPUT", source: "10.43.0.0/16" }
     - { chain: "FORWARD", source: "10.43.0.0/16" }
-    - { chain: "INPUT", source: "10.0.1.0/24" }
-    - { chain: "INPUT", source: "{{ meu_ip_adm }}", port: "6443" }
+    - { chain: "INPUT", source: "10.0.0.0/16" } # Ajustado para bater com a VCN do Terraform
+    - {
+        chain: "INPUT",
+        source: "{{ meu_ip_adm }}",
+        protocol: "tcp",
+        port: "6443",
+      }
 
 - name: Salvar regras do firewall local para persistir após reboot
-  ansible.builtin.shell: iptables-save > /etc/iptables/rules.v4
-  args:
-    creates: /etc/iptables/rules.v4.bak
-  ignore_errors: true
+  ansible.builtin.command: netfilter-persistent save
