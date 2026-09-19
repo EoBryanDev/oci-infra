@@ -33,3 +33,24 @@ output "github_secret_OCI_PRIVATE_KEY" {
   value       = tls_private_key.pipeline_key.private_key_pem
   sensitive   = true
 }
+
+output "pg_backup_bucket" {
+  description = "Bucket dos backups do Postgres"
+  value       = oci_objectstorage_bucket.pg_backups.name
+}
+
+output "pg_backup_namespace" {
+  description = "Namespace Object Storage (endpoint S3)"
+  value       = data.oci_objectstorage_namespace.this.namespace
+}
+
+output "github_secret_S3_ACCESS_KEY" {
+  description = "Access Key S3 do backup (copiar para o GitHub)"
+  value       = oci_identity_customer_secret_key.backup_svc.id
+}
+
+output "github_secret_S3_SECRET_KEY" {
+  description = "Secret Key S3 do backup (copiar para o GitHub)"
+  value       = oci_identity_customer_secret_key.backup_svc.key
+  sensitive   = true
+}

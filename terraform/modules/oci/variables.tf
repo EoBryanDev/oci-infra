@@ -44,3 +44,9 @@ variable "memory_per_node" {
   default     = 12
   description = "Memória GB por node (pipeline já injeta via TF_VAR_memory_per_node)"
 }
+
+variable "pg_backup_bucket" {
+  type        = string
+  default     = "pg-backups"
+  description = "Bucket Object Storage dos backups do Postgres (free 20GB)"
+}

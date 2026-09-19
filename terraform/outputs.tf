@@ -36,6 +36,27 @@ output "github_secret_OCI_PRIVATE_KEY" {
   sensitive   = true
 }
 
+output "pg_backup_bucket" {
+  description = "Bucket dos backups do Postgres"
+  value       = module.oci.pg_backup_bucket
+}
+
+output "pg_backup_s3_endpoint" {
+  description = "Endpoint S3-compatível do Object Storage (região do provider)"
+  value       = "https://${module.oci.pg_backup_namespace}.compat.objectstorage.${var.region}.oraclecloud.com"
+}
+
+output "github_secret_S3_ACCESS_KEY" {
+  description = "Access Key S3 do backup (copiar para o GitHub)"
+  value       = module.oci.github_secret_S3_ACCESS_KEY
+}
+
+output "github_secret_S3_SECRET_KEY" {
+  description = "Secret Key S3 do backup (copiar para o GitHub)"
+  value       = module.oci.github_secret_S3_SECRET_KEY
+  sensitive   = true
+}
+
 resource "local_file" "ansible_inventory" {
   content = <<-EOT
     [k3s_master]
