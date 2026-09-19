@@ -103,8 +103,10 @@ spec:
               {{- end }}
         grafana:
           enabled: true
-          # adminPassword NÃO fixado aqui: o chart gera random e guarda no
-          # Secret (kubectl -n monitoring get secret kube-prometheus-grafana).
+          admin:
+            # Credencial fora do Git: Secret `grafana-admin` criado à parte
+            # (chaves admin-user/admin-password). Troca = recreate o Secret.
+            existingSecret: grafana-admin
           resources:
             requests:
               cpu: 100m
