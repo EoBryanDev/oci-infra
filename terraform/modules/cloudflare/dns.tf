@@ -10,5 +10,11 @@ resource "cloudflare_record" "argo" {
   ttl     = 1    # 1 = automático quando proxied
 }
 
-# Futuras apps GitOps seguem o mesmo padrão:
-# resource "cloudflare_record" "grafana" { ... name = "grafana" ... }
+resource "cloudflare_record" "grafana" {
+  zone_id = data.cloudflare_zone.this.id
+  name    = var.grafana_subdomain
+  type    = "A"
+  content = var.lb_public_ip
+  proxied = true # nuvem laranja: TLS da borda + Origin Cert atrás
+  ttl     = 1    # 1 = automático quando proxied
+}

@@ -18,7 +18,8 @@ module "oci" {
 module "cloudflare" {
   source = "./modules/cloudflare"
 
-  zone_name      = var.cloudflare_zone_name
-  lb_public_ip   = module.oci.lb_public_ip
-  argo_subdomain = var.argo_subdomain
+  zone_name         = var.cloudflare_zone_name
+  lb_public_ip      = module.oci.lb_public_ip
+  argo_subdomain    = var.argo_subdomain
+  grafana_subdomain = var.grafana_subdomain
 }

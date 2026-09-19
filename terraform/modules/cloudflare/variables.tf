@@ -13,3 +13,9 @@ variable "argo_subdomain" {
   default     = "argo"
   description = "Subdomínio do ArgoCD (ex: argo -> argo.synit.top)"
 }
+
+variable "grafana_subdomain" {
+  type        = string
+  default     = "grafana"
+  description = "Subdomínio do Grafana (ex: grafana -> grafana.synit.top)"
+}

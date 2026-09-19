@@ -69,3 +69,9 @@ variable "argo_subdomain" {
   default     = "argo"
   description = "Subdomínio do ArgoCD"
 }
+
+variable "grafana_subdomain" {
+  type        = string
+  default     = "grafana"
+  description = "Subdomínio do Grafana"
+}
