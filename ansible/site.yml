@@ -23,6 +23,12 @@
   roles:
     - k3s_worker
 
+- name: Certificado TLS de origem (Cloudflare) para os Ingresses
+  hosts: k3s_master
+  become: true
+  roles:
+    - tls
+
 - name: Instalação e Configuração do ArgoCD (GitOps)
   hosts: k3s_master
   become: true

@@ -83,5 +83,10 @@ jobs:
         env:
           ANSIBLE_HOST_KEY_CHECKING: False
         run: |
+          # Origin Cert via base64: transporta os PEMs multilinha com segurança
+          # pelas extra-vars (o role `tls` decodifica no master e nunca grava em disco).
+          CERT_B64=$(printf '%s' "${{ secrets.CF_ORIGIN_CERT }}" | base64 -w0)
+          KEY_B64=$(printf '%s' "${{ secrets.CF_ORIGIN_KEY }}" | base64 -w0)
           ansible-playbook -i inventory/hosts.ini site.yml --private-key ~/.ssh/oracle_k3s \
-            --extra-vars "meu_ip_adm=${{ secrets.TF_VAR_MEU_IP_ADM }}"
+            --extra-vars "meu_ip_adm=${{ secrets.TF_VAR_MEU_IP_ADM }}" \
+            --extra-vars "cf_origin_cert_b64=${CERT_B64} cf_origin_key_b64=${KEY_B64}"

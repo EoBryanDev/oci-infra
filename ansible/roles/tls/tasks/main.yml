@@ -1,0 +1,33 @@
+---
+# Cria o Secret TLS do Origin Cert (Cloudflare) sem deixar PEM em disco.
+# Entrada: cf_origin_cert_b64 / cf_origin_key_b64 (base64, via --extra-vars).
+# Na pipe, o workflow gera o b64 a partir dos secrets CF_ORIGIN_CERT/KEY.
+# Local: CERT_B64=$(base64 -w0 /tmp/synit-origin.pem) e passe nas extra-vars.
+- name: Validar que cert e chave foram informados
+  fail:
+    msg: "cf_origin_cert_b64 e cf_origin_key_b64 são obrigatórios (ver workflow ansible.yml)"
+  when: cf_origin_cert_b64 is not defined or cf_origin_key_b64 is not defined
+        or (cf_origin_cert_b64 | length) == 0 or (cf_origin_key_b64 | length) == 0
+
+- name: Decodificar cert e chave (somente em memória/facts)
+  set_fact:
+    _tls_cert: "{{ cf_origin_cert_b64 | b64decode }}"
+    _tls_key: "{{ cf_origin_key_b64 | b64decode }}"
+  no_log: true
+
+- name: Criar Secret TLS do Origin Cert (idempotente)
+  shell: |
+    set -e
+    umask 077
+    trap 'rm -f /tmp/origin-tls.crt /tmp/origin-tls.key' EXIT
+    echo "$TLS_CERT" > /tmp/origin-tls.crt
+    echo "$TLS_KEY" > /tmp/origin-tls.key
+    kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+    kubectl -n argocd create secret tls argo-origin-tls \
+      --cert=/tmp/origin-tls.crt --key=/tmp/origin-tls.key \
+      --dry-run=client -o yaml | kubectl apply -f -
+  environment:
+    TLS_CERT: "{{ _tls_cert }}"
+    TLS_KEY: "{{ _tls_key }}"
+  no_log: true
+  changed_when: false

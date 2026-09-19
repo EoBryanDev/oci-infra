@@ -5,7 +5,7 @@ resource "cloudflare_record" "argo" {
   zone_id = data.cloudflare_zone.this.id
   name    = var.argo_subdomain
   type    = "A"
-  value   = var.lb_public_ip
+  content = var.lb_public_ip
   proxied = true # nuvem laranja: TLS da borda + Origin Cert atrás
   ttl     = 1    # 1 = automático quando proxied
 }
