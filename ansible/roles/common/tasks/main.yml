@@ -1,4 +1,12 @@
 ---
+- name: Remover travas órfãs do APT se existirem
+  command: rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/cache/apt/archives/lock
+  ignore_errors: true
+
+- name: Parar processos travados do apt/dpkg
+  command: pkill -9 apt apt-get dpkg
+  ignore_errors: true
+
 - name: Atualizar cache do APT
   apt:
     update_cache: yes
