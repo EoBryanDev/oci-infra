@@ -1,0 +1,21 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`grafana.synit.top`)
+      kind: Rule
+      services:
+        # Service do kube-prometheus-stack: <release>-grafana na porta 80 (HTTP).
+        # Aqui backend HTTP é seguro: o Grafana não faz redirect loop como o
+        # argocd-server (o TLS termina no Traefik com o Origin Cert).
+        - name: kube-prometheus-grafana
+          port: 80
+  tls:
+    # O role Ansible `tls` replica o Origin Cert neste namespace com o
+    # mesmo nome (Traefik só lê Secret TLS do namespace da rota).
+    secretName: argo-origin-tls
