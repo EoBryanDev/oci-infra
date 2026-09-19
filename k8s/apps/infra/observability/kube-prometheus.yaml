@@ -79,11 +79,25 @@ spec:
                   - bot_token_file: /etc/alertmanager/secrets/alertmanager-telegram/token
                     chat_id: 1998426531
                     send_resolved: true
+                    message: "{{ template \"telegram.message\" . }}"
               - name: watchdog-heartbeat
                 telegram_configs:
                   - bot_token_file: /etc/alertmanager/secrets/alertmanager-telegram/token
                     chat_id: 1998426531
                     send_resolved: false
+                    message: "{{ template \"telegram.message\" . }}"
+          # Template de mensagem: 1 alerta = 3 linhas (status, onde, resumo).
+          # Vai verbatim pro Secret (chart não aplica tpl aqui).
+          templateFiles:
+            telegram.tmpl: |-
+              {{ define "telegram.message" -}}
+              {{- range .Alerts }}
+              [{{ if eq .Status "firing" }}FIRING{{ else }}RESOLVED{{ end }}][{{ or .Labels.severity "-" }}] {{ .Labels.alertname }}
+              Onde: ns={{ or .Labels.namespace "-" }} pod={{ or .Labels.pod .Labels.instance "-" }}
+              {{- with .Annotations.summary }}
+              Resumo: {{ . }}{{ end }}
+              {{- end }}
+              {{- end }}
         grafana:
           enabled: true
           # adminPassword NÃO fixado aqui: o chart gera random e guarda no
