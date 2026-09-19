@@ -1,0 +1,122 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 91.4.1
+    helm:
+      valuesObject:
+        # K3s não expõe scheduler/controller-manager/etcd/kube-proxy nas
+        # portas padrão: sem isso, tudo vira alerta TargetDown no Telegram.
+        kubeScheduler:
+          enabled: false
+        kubeControllerManager:
+          enabled: false
+        kubeEtcd:
+          enabled: false
+        kubeProxy:
+          enabled: false
+        prometheus:
+          prometheusSpec:
+            retention: 24h # retenção mínima (decisão: custo zero de disco)
+            retentionSize: 8GB
+            replicas: 1
+            walCompression: true
+            resources:
+              requests:
+                cpu: 500m
+                memory: 2Gi
+              limits:
+                cpu: 1000m
+                memory: 3Gi
+            storageSpec:
+              volumeClaimTemplate:
+                spec:
+                  storageClassName: local-path
+                  accessModes: ["ReadWriteOnce"]
+                  resources:
+                    requests:
+                      storage: 10Gi
+        alertmanager:
+          enabled: true
+          # Campos do CR vão em alertmanagerSpec (spec do operator).
+          alertmanagerSpec:
+            replicas: 1
+            retention: 24h
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+              limits:
+                cpu: 300m
+                memory: 256Mi
+            # Monta o Secret alertmanager-telegram (role Ansible) em
+            # /etc/alertmanager/secrets/alertmanager-telegram/. O token NUNCA
+            # aparece no Git; o chat_id abaixo é só roteamento (não credencial).
+            secrets:
+              - alertmanager-telegram
+          config:
+            global:
+              resolve_timeout: 5m
+            route:
+              group_by: ["alertname", "namespace"]
+              group_wait: 30s
+              group_interval: 5m
+              repeat_interval: 4h
+              receiver: telegram
+              routes:
+                - matchers: ["alertname = Watchdog"]
+                  receiver: watchdog-heartbeat
+                  repeat_interval: 24h # heartbeat diário = prova de vida do pipeline
+            receivers:
+              - name: telegram
+                telegram_configs:
+                  - bot_token_file: /etc/alertmanager/secrets/alertmanager-telegram/token
+                    chat_id: 1998426531
+                    send_resolved: true
+              - name: watchdog-heartbeat
+                telegram_configs:
+                  - bot_token_file: /etc/alertmanager/secrets/alertmanager-telegram/token
+                    chat_id: 1998426531
+                    send_resolved: false
+        grafana:
+          enabled: true
+          # adminPassword NÃO fixado aqui: o chart gera random e guarda no
+          # Secret (kubectl -n monitoring get secret kube-prometheus-grafana).
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 300m
+              memory: 512Mi
+          additionalDataSources:
+            - name: Loki
+              type: loki
+              url: http://loki.monitoring.svc.cluster.local:3100
+              access: proxy
+            - name: Tempo
+              type: tempo
+              url: http://tempo.monitoring.svc.cluster.local:3200
+              access: proxy
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
