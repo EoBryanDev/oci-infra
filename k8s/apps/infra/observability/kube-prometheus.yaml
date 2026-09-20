@@ -138,3 +138,7 @@ spec:
         maxDuration: 3m
     syncOptions:
       - CreateNamespace=true
+      # CRDs do monitoring (prometheuses/alertmanagers) >256KB: apply
+      # client-side estoura annotations. SSA resolve; compares de sts
+      # durante rollout podem falhar transiente (retry cobre).
+      - ServerSideApply=true

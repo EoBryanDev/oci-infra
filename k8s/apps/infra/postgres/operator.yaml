@@ -33,3 +33,6 @@ spec:
         maxDuration: 3m
     syncOptions:
       - CreateNamespace=true
+      # CRDs do CNPG >256KB: apply client-side estoura o limite de annotations.
+      # SSA resolve; sem StatefulSets nesta app, sem risco do bug de schema 2.14.
+      - ServerSideApply=true
