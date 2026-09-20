@@ -11,6 +11,13 @@ spec:
     targetRevision: 0.29.0
     helm:
       valuesObject:
+        # CRDs instalados uma vez via bootstrap manual
+        # (kubectl apply --server-side, documentado no README da fase).
+        # Motivo: CRDs >256KB quebram apply client-side e o structured-merge
+        # do Argo 2.14 não conhece schemas do K8s 1.36. Mudam só em upgrade
+        # de operator (manual, com o mesmo bootstrap).
+        crds:
+          create: false
         resources:
           requests:
             cpu: 100m
@@ -33,6 +40,3 @@ spec:
         maxDuration: 3m
     syncOptions:
       - CreateNamespace=true
-      # CRDs do CNPG >256KB: apply client-side estoura o limite de annotations.
-      # SSA resolve; sem StatefulSets nesta app, sem risco do bug de schema 2.14.
-      - ServerSideApply=true
