@@ -1,0 +1,49 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: pg-main
+  namespace: databases
+spec:
+  description: "Postgres principal do portfolio (single + backups S3 no OCI)"
+  instances: 1
+  # Major pinada; minors flutuam com o operator (reprodutível sem surpresa de major).
+  imageName: ghcr.io/cloudnative-pg/postgresql:17
+  storageConfiguration:
+    size: 10Gi
+    storageClass: local-path
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+  postgresql:
+    parameters:
+      max_connections: "100"
+  bootstrap:
+    initdb:
+      database: appdb
+      owner: app
+      # Secret pg-main-app-auth é CRIADO pelo operator (senha gerada).
+      secret:
+        name: pg-main-app-auth
+  monitoring:
+    enablePodMonitor: true
+  backup:
+    barmanObjectStore:
+      destinationPath: s3://pg-backups
+      # Endpoint S3-compatível (namespace público por construção, sem segredo).
+      endpointURL: https://axidysriu3ae.compat.objectstorage.us-phoenix-1.oraclecloud.com
+      s3Credentials:
+        accessKeyId:
+          name: pg-backup-s3 # role Ansible `pgbackup`, nunca commitado
+          key: ACCESS_KEY_ID
+        secretAccessKey:
+          name: pg-backup-s3
+          key: SECRET_ACCESS_KEY
+      wal:
+        compression: gzip
+        maxParallel: 2
+      data:
+        compression: gzip

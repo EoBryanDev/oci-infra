@@ -1,0 +1,12 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: pg-main-daily
+  namespace: databases
+spec:
+  schedule: "0 4 * * *" # 04:00 UTC todos os dias
+  backupOwnerReference: self-contained
+  cluster:
+    name: pg-main
+  method: barmanObjectStore
+  retentionPolicy: 7d # 7 dias cabem folgados nos 20GB free
