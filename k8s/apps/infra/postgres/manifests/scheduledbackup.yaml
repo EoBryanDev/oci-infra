@@ -5,7 +5,9 @@ metadata:
   namespace: databases
 spec:
   schedule: "0 4 * * *" # 04:00 UTC todos os dias
-  backupOwnerReference: self-contained
+  # none = backups sobrevivem à deleção do Cluster/ScheduledBackup.
+  # É o que permite restore após desastre (valores válidos: none/self/cluster).
+  backupOwnerReference: none
   cluster:
     name: pg-main
   method: barmanObjectStore
