@@ -25,9 +25,8 @@ spec:
     initdb:
       database: appdb
       owner: app
-      # Secret pg-main-app-auth é CRIADO pelo operator (senha gerada).
-      secret:
-        name: pg-main-app-auth
+      # Sem `secret:` custom: o operator cria `pg-main-app` sozinho.
+      # (Nome custom exigiria Secret pré-existente; o operator não gera.)
   monitoring:
     enablePodMonitor: true
   backup:
