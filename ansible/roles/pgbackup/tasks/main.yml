@@ -14,8 +14,9 @@
     set -e
     umask 077
     trap 'rm -f /tmp/s3-ak /tmp/s3-sk' EXIT
-    echo "$S3_AK" > /tmp/s3-ak
-    echo "$S3_SK" > /tmp/s3-sk
+    # printf (nunca echo): trailing newline quebra a assinatura AWS4 (Invalid header).
+    printf '%s' "$S3_AK" > /tmp/s3-ak
+    printf '%s' "$S3_SK" > /tmp/s3-sk
     kubectl create namespace databases --dry-run=client -o yaml | kubectl apply -f -
     kubectl -n databases create secret generic pg-backup-s3 \
       --from-file=ACCESS_KEY_ID=/tmp/s3-ak \

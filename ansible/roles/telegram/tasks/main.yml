@@ -15,8 +15,8 @@
     set -e
     umask 077
     trap 'rm -f /tmp/tg-token /tmp/tg-chat' EXIT
-    echo "$TG_TOKEN" > /tmp/tg-token
-    echo "$TG_CHAT" > /tmp/tg-chat
+    printf '%s' "$TG_TOKEN" > /tmp/tg-token
+    printf '%s' "$TG_CHAT" > /tmp/tg-chat
     kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
     kubectl -n monitoring create secret generic alertmanager-telegram \
       --from-file=token=/tmp/tg-token \
