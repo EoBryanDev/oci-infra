@@ -21,6 +21,13 @@ spec:
   postgresql:
     parameters:
       max_connections: "100"
+  # OCI S3-compat rejeita `Content-Encoding: aws-chunked` (501 NotImplemented)
+  # que SDKs novos adicionam por default. `when_required` força uploads plain.
+  env:
+    - name: AWS_REQUEST_CHECKSUM_CALCULATION
+      value: when_required
+    - name: AWS_RESPONSE_CHECKSUM_VALIDATION
+      value: when_required
   bootstrap:
     initdb:
       database: appdb
