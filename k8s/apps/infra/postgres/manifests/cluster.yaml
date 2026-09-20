@@ -8,7 +8,7 @@ spec:
   instances: 1
   # Major pinada; minors flutuam com o operator (reprodutível sem surpresa de major).
   imageName: ghcr.io/cloudnative-pg/postgresql:17
-  storageConfiguration:
+  storage:
     size: 10Gi
     storageClass: local-path
   resources:
