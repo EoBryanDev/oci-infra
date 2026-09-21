@@ -35,13 +35,13 @@ spec:
               set -euo pipefail
               # 1. Role (DO block é transacional — OK para roles).
               psql -d postgres -v ON_ERROR_STOP=1 <<'SQL'
-              DO $$
+              DO $do$
               BEGIN
                 IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'palpitai_app') THEN
                   CREATE ROLE palpitai_app LOGIN CONNECTION LIMIT 20;
                 END IF;
               END
-              $$;
+              $do$;
               GRANT palpitai_app TO SESSION_USER;
               SQL
               # 2. Database via createdb (fora de transação — CREATE DATABASE
