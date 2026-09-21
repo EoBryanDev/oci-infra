@@ -3,6 +3,11 @@ kind: Application
 metadata:
   name: kube-prometheus
   namespace: argocd
+  annotations:
+    # K8s 1.36 reports status.terminatingReplicas nos StatefulSets; o schema
+    # embutido no Argo 2.14 não conhece o campo e o diff client-side quebra
+    # (ComparisonError). ServerSideDiff delega ao API server (schema correto).
+    argocd.argoproj.io/compare-options: ServerSideDiff=true
 spec:
   project: default
   source:

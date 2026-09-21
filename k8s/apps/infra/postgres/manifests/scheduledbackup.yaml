@@ -11,4 +11,3 @@ spec:
   cluster:
     name: pg-main
   method: barmanObjectStore
-  retentionPolicy: 7d # 7 dias cabem folgados nos 20GB free
