@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - app.yaml
+# A pipeline da app atualiza newTag a cada push (commit chore: portfolio image <sha>).
+images:
+  - name: ghcr.io/eobryandev/portfolio-web
+    newName: ghcr.io/eobryandev/portfolio-web
+    newTag: latest

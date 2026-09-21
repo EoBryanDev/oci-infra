@@ -27,3 +27,12 @@ resource "cloudflare_record" "palpitai" {
   proxied = true # nuvem laranja: TLS da borda + Origin Cert atrás
   ttl     = 1    # 1 = automático quando proxied
 }
+
+resource "cloudflare_record" "eobryandev" {
+  zone_id = data.cloudflare_zone.this.id
+  name    = var.eobryandev_subdomain
+  type    = "A"
+  content = var.lb_public_ip
+  proxied = true # nuvem laranja: TLS da borda + Origin Cert atrás
+  ttl     = 1    # 1 = automático quando proxied
+}

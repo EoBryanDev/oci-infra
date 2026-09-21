@@ -5,3 +5,4 @@ resources:
   - infra/observability
   - infra/postgres
   - apps/palpitai
+  - apps/portfolio

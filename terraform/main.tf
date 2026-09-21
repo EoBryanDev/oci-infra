@@ -23,6 +23,7 @@ module "cloudflare" {
   argo_subdomain     = var.argo_subdomain
   grafana_subdomain  = var.grafana_subdomain
   palpitai_subdomain = var.palpitai_subdomain
+  eobryandev_subdomain = var.eobryandev_subdomain
 }
 
 module "finops" {

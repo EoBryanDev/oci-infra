@@ -1,0 +1,60 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: provision-portfolio
+  namespace: databases
+  annotations:
+    # Reserva o banco do futuro blog do portfólio. Roda após o Cluster
+    # existir. Job completo não re-executa no sync.
+    # Bootstrap one-time (fora do Git): app precisa de CREATEDB/CREATEROLE
+    # e membership em eobryandev_portifolio_app (já concedidos no provision
+    # do palpitai para o role app).
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: provision
+          image: docker.io/library/postgres:17
+          env:
+            - name: PGHOST
+              value: pg-main-rw
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: pg-main-app
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: pg-main-app
+                  key: password
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -euo pipefail
+              # 1. Role (DO block é transacional — OK para roles;
+              # $do$ quoting porque o K8s colapsa $$ em command/args).
+              psql -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+              DO $do$
+              BEGIN
+                IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'eobryandev_portifolio_app') THEN
+                  CREATE ROLE eobryandev_portifolio_app LOGIN CONNECTION LIMIT 20;
+                END IF;
+              END
+              $do$;
+              GRANT eobryandev_portifolio_app TO SESSION_USER;
+              SQL
+              # 2. Database via createdb (fora de transação — CREATE DATABASE
+              #    não roda dentro de bloco transacional nem em DO).
+              if ! psql -d postgres -tAc \
+                "SELECT 1 FROM pg_database WHERE datname='eobryandev-portifolio'" | grep -q 1; then
+                createdb -O eobryandev_portifolio_app eobryandev-portifolio
+              fi
+              # 3. Guardrails por projeto.
+              psql -d postgres -v ON_ERROR_STOP=1 \
+                -c "ALTER ROLE eobryandev_portifolio_app IN DATABASE \"eobryandev-portifolio\" SET statement_timeout = '30s';"
+              echo "provision portfolio OK"
+  backoffLimit: 3

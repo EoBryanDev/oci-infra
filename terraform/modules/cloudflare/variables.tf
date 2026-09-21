@@ -25,3 +25,9 @@ variable "palpitai_subdomain" {
   default     = "palpitai"
   description = "Subdomínio do PalpitAI (ex: palpitai -> palpitai.synit.top)"
 }
+
+variable "eobryandev_subdomain" {
+  type        = string
+  default     = "eobryandev"
+  description = "Subdomínio do portfólio (ex: eobryandev -> eobryandev.synit.top)"
+}

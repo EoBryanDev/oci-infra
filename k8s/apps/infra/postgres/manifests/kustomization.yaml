@@ -5,3 +5,4 @@ resources:
   - cluster.yaml
   - scheduledbackup.yaml
   - provision-palpitai.yaml
+  - provision-portfolio.yaml
