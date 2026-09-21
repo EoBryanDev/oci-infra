@@ -6,4 +6,4 @@ resources:
 images:
   - name: ghcr.io/eobryandev/portfolio-web
     newName: ghcr.io/eobryandev/portfolio-web
-    newTag: latest
+    newTag: c45646e
