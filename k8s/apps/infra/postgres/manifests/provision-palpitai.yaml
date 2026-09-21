@@ -5,6 +5,8 @@ metadata:
   namespace: databases
   annotations:
     # Roda após o Cluster existir. Job completo não re-executa no sync.
+    # Bootstrap one-time (fora do Git): app precisa de CREATEDB/CREATEROLE
+    # e membership em palpitai_app (ver runbook da migração Neon).
     argocd.argoproj.io/sync-wave: "2"
 spec:
   template:
@@ -17,20 +19,22 @@ spec:
             - name: PGHOST
               value: pg-main-rw
             - name: PGUSER
-              value: postgres
+              valueFrom:
+                secretKeyRef:
+                  name: pg-main-app
+                  key: username
             - name: PGPASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: pg-main-superuser
+                  name: pg-main-app
                   key: password
           command:
-            - psql
-            - -d
-            - postgres
-            - -v
-            - ON_ERROR_STOP=1
+            - /bin/bash
             - -c
             - |
+              set -euo pipefail
+              # 1. Role (DO block é transacional — OK para roles).
+              psql -d postgres -v ON_ERROR_STOP=1 <<'SQL'
               DO $$
               BEGIN
                 IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'palpitai_app') THEN
@@ -38,7 +42,16 @@ spec:
                 END IF;
               END
               $$;
-              SELECT 'CREATE DATABASE palpitai OWNER palpitai_app'
-              WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'palpitai')\gexec
-              ALTER ROLE palpitai_app IN DATABASE palpitai SET statement_timeout = '30s';
+              GRANT palpitai_app TO SESSION_USER;
+              SQL
+              # 2. Database via createdb (fora de transação — CREATE DATABASE
+              #    não roda dentro de bloco transacional nem em DO).
+              if ! psql -d postgres -tAc \
+                "SELECT 1 FROM pg_database WHERE datname='palpitai'" | grep -q 1; then
+                createdb -O palpitai_app palpitai
+              fi
+              # 3. Guardrails por projeto.
+              psql -d postgres -v ON_ERROR_STOP=1 \
+                -c "ALTER ROLE palpitai_app IN DATABASE palpitai SET statement_timeout = '30s';"
+              echo "provision palpitai OK"
   backoffLimit: 3

@@ -4,3 +4,4 @@ resources:
   - ns.yaml
   - cluster.yaml
   - scheduledbackup.yaml
+  - provision-palpitai.yaml
