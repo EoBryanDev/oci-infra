@@ -76,6 +76,12 @@ variable "grafana_subdomain" {
   description = "Subdomínio do Grafana"
 }
 
+variable "palpitai_subdomain" {
+  type        = string
+  default     = "palpitai"
+  description = "Subdomínio do PalpitAI"
+}
+
 # --- FinOps: guardrails Always Free ---
 variable "budget_alert_email" {
   type        = string

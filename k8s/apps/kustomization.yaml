@@ -4,4 +4,4 @@ resources:
   - infra/argo
   - infra/observability
   - infra/postgres
-  # apps/ entra aqui quando a primeira app real pousar (cada app com sua kustomization).
+  - apps/palpitai

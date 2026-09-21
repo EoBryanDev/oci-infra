@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - app.yaml
+# A pipeline da app atualiza newTag a cada push (commit chore: palpitai image <sha>).
+images:
+  - name: ghcr.io/eobryandev/dev4-palpita-ai-web
+    newName: ghcr.io/eobryandev/dev4-palpita-ai-web
+    newTag: latest
+  - name: ghcr.io/eobryandev/dev4-palpita-ai-migrator
+    newName: ghcr.io/eobryandev/dev4-palpita-ai-migrator
+    newTag: latest

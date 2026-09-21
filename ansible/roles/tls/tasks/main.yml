@@ -1,6 +1,6 @@
 ---
-# Cria o Secret TLS do Origin Cert (Cloudflare) nos namespaces argocd e
-# monitoring (o Traefik só lê Secret TLS do namespace da rota), sem deixar PEM em disco.
+# Cria o Secret TLS do Origin Cert (Cloudflare) nos namespaces argocd,
+# monitoring e apps (o Traefik só lê Secret TLS do namespace da rota), sem deixar PEM em disco.
 # Entrada: cf_origin_cert_b64 / cf_origin_key_b64 (base64, via --extra-vars).
 # Na pipe, o workflow gera o b64 a partir dos secrets CF_ORIGIN_CERT/KEY.
 # Local: CERT_B64=$(base64 -w0 /tmp/synit-origin.pem) e passe nas extra-vars.
@@ -25,7 +25,8 @@
     printf '%s' "$TLS_KEY" > /tmp/origin-tls.key
     kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
     kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
-    for NS in argocd monitoring; do
+    kubectl create namespace apps --dry-run=client -o yaml | kubectl apply -f -
+    for NS in argocd monitoring apps; do
       kubectl -n "$NS" create secret tls argo-origin-tls \
         --cert=/tmp/origin-tls.crt --key=/tmp/origin-tls.key \
         --dry-run=client -o yaml | kubectl apply -f -

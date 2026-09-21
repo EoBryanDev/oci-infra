@@ -19,3 +19,9 @@ variable "grafana_subdomain" {
   default     = "grafana"
   description = "Subdomínio do Grafana (ex: grafana -> grafana.synit.top)"
 }
+
+variable "palpitai_subdomain" {
+  type        = string
+  default     = "palpitai"
+  description = "Subdomínio do PalpitAI (ex: palpitai -> palpitai.synit.top)"
+}

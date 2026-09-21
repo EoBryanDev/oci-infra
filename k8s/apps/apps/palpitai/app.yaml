@@ -1,0 +1,112 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: apps
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: palpitai-web
+  namespace: apps
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: palpitai-web
+  template:
+    metadata:
+      labels:
+        app: palpitai-web
+    spec:
+      containers:
+        - name: web
+          image: ghcr.io/eobryandev/dev4-palpita-ai-web:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - secretRef:
+                name: palpitai-web
+          env:
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://otel-collector-opentelemetry-collector.monitoring.svc.cluster.local:4317
+            - name: OTEL_SERVICE_NAME
+              value: palpitai-web
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 45
+            periodSeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: palpitai-web
+  namespace: apps
+spec:
+  selector:
+    app: palpitai-web
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: palpitai-web
+  namespace: apps
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`palpitai.synit.top`)
+      services:
+        - name: palpitai-web
+          port: 80
+  tls:
+    secretName: argo-origin-tls
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: palpitai-migrate
+  namespace: apps
+  annotations:
+    # Roda o drizzle-kit migrate antes de cada rollout relevante.
+    # Job completo não re-executa no sync (recriar para nova migração:
+    # kubectl -n apps delete job palpitai-migrate e deixa o Argo recriar).
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrate
+          image: ghcr.io/eobryandev/dev4-palpita-ai-migrator:latest
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: palpitai-web
+  backoffLimit: 3
