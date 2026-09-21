@@ -6,7 +6,7 @@ resources:
 images:
   - name: ghcr.io/eobryandev/dev4-palpita-ai-web
     newName: ghcr.io/eobryandev/dev4-palpita-ai-web
-    newTag: b3c48cc
+    newTag: 849a231
   - name: ghcr.io/eobryandev/dev4-palpita-ai-migrator
     newName: ghcr.io/eobryandev/dev4-palpita-ai-migrator
-    newTag: b3c48cc
+    newTag: 849a231
