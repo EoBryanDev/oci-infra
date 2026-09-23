@@ -1,0 +1,82 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dashboard-apps
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1" # sidecar do stack importa automaticamente
+data:
+  apps.json: |-
+    {
+      "title": "Apps",
+      "uid": "apps",
+      "schemaVersion": 39,
+      "version": 1,
+      "time": { "from": "now-6h", "to": "now" },
+      "panels": [
+        {
+          "title": "Req/s (apps)", "type": "stat",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "expr": "sum(rate(traefik_service_requests_total{exported_service=~\"apps-.*\"}[5m]))" }],
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 }
+        },
+        {
+          "title": "Latência p95 (apps)", "type": "stat",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "expr": "histogram_quantile(0.95, sum by (le) (rate(traefik_service_request_duration_seconds_bucket{exported_service=~\"apps-.*\"}[5m])))" }],
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 }
+        },
+        {
+          "title": "Erros 5xx / 5min", "type": "stat",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "expr": "sum(increase(traefik_service_requests_total{exported_service=~\"apps-.*\", code=~\"5..\"}[5m]))" }],
+          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 }
+        },
+        {
+          "title": "Restarts pods (24h)", "type": "stat",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"apps\"}[24h]))" }],
+          "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 }
+        },
+        {
+          "title": "Req/s por app", "type": "timeseries",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "expr": "label_replace(sum by (exported_service) (rate(traefik_service_requests_total{exported_service=~\"apps-.*\"}[5m])), \"app\", \"$1\", \"exported_service\", \"apps-([a-z-]+)-[a-z0-9]+@kubernetescrd\")", "legendFormat": "{{app}}" }],
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 }
+        },
+        {
+          "title": "Latência p50/p95/p99 por app", "type": "timeseries",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            { "expr": "label_replace(histogram_quantile(0.50, sum by (exported_service, le) (rate(traefik_service_request_duration_seconds_bucket{exported_service=~\"apps-.*\"}[5m]))), \"app\", \"$1\", \"exported_service\", \"apps-([a-z-]+)-[a-z0-9]+@kubernetescrd\")", "legendFormat": "p50 {{app}}" },
+            { "expr": "label_replace(histogram_quantile(0.95, sum by (exported_service, le) (rate(traefik_service_request_duration_seconds_bucket{exported_service=~\"apps-.*\"}[5m]))), \"app\", \"$1\", \"exported_service\", \"apps-([a-z-]+)-[a-z0-9]+@kubernetescrd\")", "legendFormat": "p95 {{app}}" },
+            { "expr": "label_replace(histogram_quantile(0.99, sum by (exported_service, le) (rate(traefik_service_request_duration_seconds_bucket{exported_service=~\"apps-.*\"}[5m]))), \"app\", \"$1\", \"exported_service\", \"apps-([a-z-]+)-[a-z0-9]+@kubernetescrd\")", "legendFormat": "p99 {{app}}" }
+          ],
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 }
+        },
+        {
+          "title": "Banda out por app", "type": "timeseries",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "expr": "label_replace(sum by (exported_service) (rate(traefik_service_responses_bytes_total{exported_service=~\"apps-.*\"}[5m])), \"app\", \"$1\", \"exported_service\", \"apps-([a-z-]+)-[a-z0-9]+@kubernetescrd\")", "legendFormat": "{{app}}" }],
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 }
+        },
+        {
+          "title": "Erros por app/code (1h)", "type": "table",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "expr": "label_replace(sum by (exported_service, code) (increase(traefik_service_requests_total{exported_service=~\"apps-.*\", code=~\"4..|5..\"}[1h])), \"app\", \"$1\", \"exported_service\", \"apps-([a-z-]+)-[a-z0-9]+@kubernetescrd\")", "format": "table", "instant": true }],
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 }
+        },
+        {
+          "title": "CPU pods (apps)", "type": "timeseries",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"apps\", container!=\"\", container!=\"POD\"}[5m]))", "legendFormat": "{{pod}}" }],
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 }
+        },
+        {
+          "title": "RAM pods (apps)", "type": "timeseries",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"apps\", container!=\"\", container!=\"POD\"})", "legendFormat": "{{pod}}" }],
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 }
+        }
+      ]
+    }

@@ -11,3 +11,7 @@ resources:
   - traefik-metrics.yaml
   - dashboards/infra-executiva.yaml
   - dashboards/argocd-sync.yaml
+  - dashboards/apps.yaml
+  - dashboards/traefik-fluxo.yaml
+  - daily-report/configmap.yaml
+  - daily-report/cronjob.yaml

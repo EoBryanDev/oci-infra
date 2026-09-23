@@ -1,0 +1,41 @@
+# Relatorio diario 22h BRT no Telegram (mesmo bot/chat do Alertmanager).
+# Imagem python:3.13-alpine (multi-arch, cabe no Always Free).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: daily-report
+  namespace: monitoring
+spec:
+  schedule: "0 22 * * *"
+  timeZone: "America/Sao_Paulo"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: report
+              image: python:3.13-alpine
+              command: ["python", "/scripts/daily_report.py"]
+              env:
+                - name: TELEGRAM_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: alertmanager-telegram
+                      key: token
+                - name: TELEGRAM_CHAT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: alertmanager-telegram
+                      key: chat_id
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+          volumes:
+            - name: script
+              configMap:
+                name: daily-report-script

@@ -1,0 +1,112 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: daily-report-script
+  namespace: monitoring
+data:
+  daily_report.py: |-
+    """Relatorio diario 22h BRT: consulta o Prometheus e envia resumo no Telegram.
+    So stdlib (urllib/json). Env: PROM_URL, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID."""
+    import json
+    import os
+    import re
+    import urllib.parse
+    import urllib.request
+    from datetime import datetime
+
+    PROM_URL = os.environ.get(
+        "PROM_URL",
+        "http://kube-prometheus-kube-prome-prometheus.monitoring.svc.cluster.local:9090",
+    )
+    TOKEN = os.environ["TELEGRAM_TOKEN"]
+    CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
+
+    FRIENDLY = {"palpitai-web": "palpitai", "portfolio-web": "portfolio"}
+
+
+    def short(svc):
+        m = re.match(r"apps-([a-z-]+)-[a-z0-9]+@kubernetescrd", svc or "")
+        name = m.group(1) if m else (svc or "?")
+        return FRIENDLY.get(name, name)
+
+
+    def q(expr):
+        url = PROM_URL + "/api/v1/query?" + urllib.parse.urlencode({"query": expr})
+        with urllib.request.urlopen(url, timeout=30) as r:
+            body = json.load(r)
+        if body.get("status") != "success":
+            raise RuntimeError(f"PromQL falhou: {expr} -> {body}")
+        return body["data"]["result"]
+
+
+    def scalar(expr, default=0.0):
+        res = q(expr)
+        return float(res[0]["value"][1]) if res else default
+
+
+    def fmt_bytes(n):
+        for unit in ("B", "KB", "MB", "GB"):
+            if n < 1024:
+                return f"{n:.0f} {unit}"
+            n /= 1024
+        return f"{n:.1f} TB"
+
+
+    def main():
+        cpu = scalar('avg(avg_over_time(rate(node_cpu_seconds_total{mode!="idle"}[5m])[24h:5m]))') * 100
+        ram = scalar("avg(avg_over_time((1 - node_memory_MemAvailable_bytes/node_memory_MemTotal_bytes)[24h:5m]))") * 100
+        disk = scalar(
+            'avg(avg_over_time(((node_filesystem_size_bytes{mountpoint="/",fstype!~"rootfs|tmpfs|overlay"}'
+            ' - node_filesystem_avail_bytes{mountpoint="/",fstype!~"rootfs|tmpfs|overlay"})'
+            ' / node_filesystem_size_bytes{mountpoint="/",fstype!~"rootfs|tmpfs|overlay"})[24h:5m]))'
+        ) * 100
+        rx = scalar('sum(increase(container_network_receive_bytes_total{namespace="apps"}[24h]))')
+        tx = scalar('sum(increase(container_network_transmit_bytes_total{namespace="apps"}[24h]))')
+
+        top = q('topk(5, sum by (exported_service) (increase(traefik_service_requests_total{exported_service=~"apps-.*"}[24h])))')
+        errs = q('sum by (exported_service) (increase(traefik_service_requests_total{exported_service=~"apps-.*",code=~"5.."}[24h]))')
+        err_map = {r["metric"]["exported_service"]: float(r["value"][1]) for r in errs}
+        restarts = q('sum by (pod) (increase(kube_pod_container_status_restarts_total{namespace="apps"}[24h]))')
+
+        lines = [
+            f"*Resumo do dia* ({datetime.now().strftime('%d/%m')})",
+            "",
+            "*Infraestrutura (media 24h)*",
+            f"CPU: {cpu:.0f}%  |  RAM: {ram:.0f}%  |  Disco: {disk:.0f}%",
+            "",
+            "*Rede das apps (24h)*",
+            f"In: {fmt_bytes(rx)}  |  Out: {fmt_bytes(tx)}",
+            "",
+            "*Top rotas por app*",
+        ]
+        if top:
+            for r in sorted(top, key=lambda x: -float(x["value"][1])):
+                svc = r["metric"]["exported_service"]
+                n = float(r["value"][1])
+                e = err_map.get(svc, 0)
+                flag = f" ({e:.0f} erros 5xx)" if e > 0 else ""
+                lines.append(f"- {short(svc)}: {n:.0f} req{flag}")
+        else:
+            lines.append("- sem trafego nas apps hoje")
+        lines.append("")
+        bad = [(r["metric"]["pod"], float(r["value"][1])) for r in restarts if float(r["value"][1]) > 0]
+        if bad:
+            lines.append("*Restarts*")
+            lines += [f"- {pod}: {n:.0f}" for pod, n in bad]
+        else:
+            lines.append("Sem restarts nas apps. Quinze pras dez, tudo certo.")
+
+        msg = "\n".join(lines)
+        req = urllib.request.Request(
+            f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+            data=json.dumps({"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=30) as r:
+            resp = json.load(r)
+        assert resp.get("ok"), f"Telegram respondeu erro: {resp}"
+        print("relatorio enviado")
+
+
+    if __name__ == "__main__":
+        main()

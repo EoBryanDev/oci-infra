@@ -1,0 +1,81 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dashboard-traefik-fluxo
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1" # sidecar do stack importa automaticamente
+data:
+  traefik-fluxo.json: |-
+    {
+      "title": "Traefik / Fluxo",
+      "uid": "traefik-fluxo",
+      "schemaVersion": 39,
+      "version": 1,
+      "time": { "from": "now-6h", "to": "now" },
+      "panels": [
+        {
+          "title": "Req/s (entrypoints 80+443)", "type": "stat",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "expr": "sum(rate(traefik_entrypoint_requests_total[5m]))" }],
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 }
+        },
+        {
+          "title": "Banda out total", "type": "stat",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "expr": "sum(rate(traefik_entrypoint_responses_bytes_total[5m]))" }],
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 }
+        },
+        {
+          "title": "Conexões abertas", "type": "stat",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "expr": "sum(traefik_open_connections)" }],
+          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 }
+        },
+        {
+          "title": "Cert TLS expira em (dias)", "type": "stat",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "expr": "min((traefik_tls_certs_not_after - time()) / 86400)" }],
+          "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 }
+        },
+        {
+          "title": "Req/s por entrypoint", "type": "timeseries",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "expr": "sum by (entrypoint) (rate(traefik_entrypoint_requests_total[5m]))", "legendFormat": "{{entrypoint}}" }],
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 }
+        },
+        {
+          "title": "Banda in/out total", "type": "timeseries",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            { "expr": "sum(rate(traefik_entrypoint_requests_bytes_total[5m]))", "legendFormat": "in" },
+            { "expr": "sum(rate(traefik_entrypoint_responses_bytes_total[5m]))", "legendFormat": "out" }
+          ],
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 }
+        },
+        {
+          "title": "Req/s por destino (todos serviços)", "type": "timeseries",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "expr": "topk(8, sum by (exported_service) (rate(traefik_service_requests_total[5m])))", "legendFormat": "{{exported_service}}" }],
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 }
+        },
+        {
+          "title": "Requests por code (stack)", "type": "timeseries",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "expr": "sum by (code) (rate(traefik_entrypoint_requests_total[5m]))", "legendFormat": "{{code}}" }],
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 }
+        },
+        {
+          "title": "Top destinos 24h (req + bytes out)", "type": "table",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "expr": "topk(10, sum by (exported_service) (increase(traefik_service_requests_total[24h])))", "format": "table", "instant": true }],
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 }
+        },
+        {
+          "title": "Latência p95 entrypoint", "type": "timeseries",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [{ "expr": "histogram_quantile(0.95, sum by (le, entrypoint) (rate(traefik_entrypoint_request_duration_seconds_bucket[5m])))", "legendFormat": "p95 {{entrypoint}}" }],
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 }
+        }
+      ]
+    }
