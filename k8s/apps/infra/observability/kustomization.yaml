@@ -8,5 +8,6 @@ resources:
   - otel-collector.yaml
   - grafana-ingressroute.yaml
   - argocd-monitor.yaml
+  - traefik-metrics.yaml
   - dashboards/infra-executiva.yaml
   - dashboards/argocd-sync.yaml

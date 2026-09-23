@@ -1,0 +1,38 @@
+# Métricas do Traefik já vêm habilitadas pelo K3s (--metrics.prometheus=true :9100),
+# mas o Service `traefik` só publica web/websecure. Este Service próprio expõe
+# :9100 só interno (ClusterIP, sem IngressRoute) para o Prometheus coletar.
+# Recurso adicional — não conflita com o chart gerenciado pelo K3s.
+apiVersion: v1
+kind: Service
+metadata:
+  name: traefik-metrics
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: traefik-metrics
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: traefik
+  ports:
+    - name: metrics
+      port: 9100
+      targetPort: 9100
+      protocol: TCP
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: traefik-metrics
+  namespace: monitoring # mesmo ns do Prometheus = discovery automática
+  labels:
+    release: kube-prometheus # matchLabels que o stack usa por padrão
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: traefik-metrics
+  namespaceSelector:
+    matchNames:
+      - kube-system
+  endpoints:
+    - port: metrics
+      interval: 30s
