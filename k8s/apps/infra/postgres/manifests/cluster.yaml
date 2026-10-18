@@ -36,26 +36,27 @@ spec:
       # (Nome custom exigiria Secret pré-existente; o operator não gera.)
   monitoring:
     enablePodMonitor: true
-  backup:
-    barmanObjectStore:
-      destinationPath: s3://pg-backups
-      # Endpoint S3-compatível (namespace público por construção, sem segredo).
-      endpointURL: https://axidysriu3ae.compat.objectstorage.us-phoenix-1.oraclecloud.com
-      s3Credentials:
-        accessKeyId:
-          name: pg-backup-s3 # role Ansible `pgbackup`, nunca commitado
-          key: ACCESS_KEY_ID
-        secretAccessKey:
-          name: pg-backup-s3
-          key: SECRET_ACCESS_KEY
-      wal:
-        compression: gzip
-        maxParallel: 2
-      data:
-        compression: gzip
-    # Retenção (recovery window): irmão de `barmanObjectStore`, NÃO filho dele.
-    # Sem isto o bucket só cresce: cada backup novo lista TODO o prefixo `base/`
-    # (≈1 GET por objeto ali dentro), então o custo por backup é O(nº backups).
-    # "1w" = janela de recuperação de 7 dias: poda o backlog de hora em hora e
-    # mantém ~2 backups na cadência de 4 dias. Formato: ^[1-9][0-9]*[dwm]$.
-    retentionPolicy: "1w"
+  # ---------------------------------------------------------------------------
+  # Backup pelo plugin CNPG-I (Barman Cloud Plugin).
+  #
+  # Migrado em 18/10/2026 do caminho nativo `spec.backup.barmanObjectStore`,
+  # que o CNPG 1.31 REMOVE. A config S3 saiu daqui e virou o CR `ObjectStore`
+  # (objectstore.yaml) — mesmo bucket/prefixo/credenciais, catálogo de backups
+  # existente reaproveitado. O `retentionPolicy: "1w"` também mudou de lugar
+  # (agora no ObjectStore).
+  #
+  # `isWALArchiver: true` = este plugin passa a ser QUEM arquiva os WALs do
+  # cluster (substitui o archiver nativo do operator).
+  #
+  # VERIFICAÇÃO OBRIGATÓRIA logo após o apply (é o único ponto de risco da
+  # migração: WAL que não é arquivado enche o PVC de 10Gi e trava o banco):
+  #   kubectl -n databases get cluster pg-main \
+  #     -o jsonpath='{range .status.conditions[*]}{.type}={.status}{"\n"}{end}'
+  # Precisa conter `ContinuousArchiving=True`. Se não contiver, `git revert`
+  # deste commit e o ArgoCD devolve o estado anterior sozinho.
+  # ---------------------------------------------------------------------------
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: pg-main-store

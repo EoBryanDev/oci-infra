@@ -1,0 +1,42 @@
+# O destino de backup saiu do Cluster e virou um CR próprio.
+#
+# Motivo: o CNPG 1.31 REMOVE `spec.backup.barmanObjectStore`; o caminho
+# suportado passa a ser o Barman Cloud Plugin (CNPG-I), que lê a config S3
+# deste `ObjectStore`. Migração feita em 18/10/2026, ANTES do upgrade forçado
+# do operator — com o cluster em 1.30, na calma, em vez de sob pressão.
+#
+# Migração 1:1 (nada de reescrita): mesmo bucket, mesmo prefixo, mesmas
+# credenciais, mesma compressão. O plugin usa o MESMO layout barman no bucket
+# (`pg-main/base/<timestamp>/`, `pg-main/wals/<timeline>/...`), então o
+# catálogo de backups que já existe continua recuperável — não há reupload
+# nem perda de histórico.
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: pg-main-store
+  namespace: databases
+spec:
+  # Conteúdo idêntico ao antigo `Cluster.spec.backup.barmanObjectStore`.
+  configuration:
+    destinationPath: s3://pg-backups
+    # Endpoint S3-compatível (namespace público por construção, sem segredo).
+    endpointURL: https://axidysriu3ae.compat.objectstorage.us-phoenix-1.oraclecloud.com
+    s3Credentials:
+      accessKeyId:
+        name: pg-backup-s3 # role Ansible `pgbackup`, nunca commitado
+        key: ACCESS_KEY_ID
+      secretAccessKey:
+        name: pg-backup-s3
+        key: SECRET_ACCESS_KEY
+    wal:
+      compression: gzip
+      maxParallel: 2
+    data:
+      compression: gzip
+  # Retenção (recovery window) MUDOU DE LUGAR na migração: era
+  # `Cluster.spec.backup.retentionPolicy`, agora é irmã de `configuration` aqui.
+  # Sem ela o bucket só cresce: cada backup novo lista TODO o prefixo `base/`
+  # (≈1 GET por objeto ali dentro), então o custo por backup é O(nº backups).
+  # "1w" = janela de recuperação de 7 dias: poda o backlog de hora em hora e
+  # mantém ~2 backups na cadência de 4 dias. Formato: ^[1-9][0-9]*[dwm]$.
+  retentionPolicy: "1w"

@@ -21,4 +21,11 @@ spec:
   backupOwnerReference: none
   cluster:
     name: pg-main
-  method: barmanObjectStore
+  # Migrado em 18/10/2026 do método nativo para o plugin (CNPG-I). O destino S3
+  # NÃO vai aqui: o plugin herda o `ObjectStore` declarado no Cluster
+  # (`spec.plugins[].parameters.barmanObjectName` = pg-main-store), exatamente
+  # como nos exemplos oficiais de migração. `pluginConfiguration` aqui só
+  # escolhe QUAL plugin executa o backup.
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
