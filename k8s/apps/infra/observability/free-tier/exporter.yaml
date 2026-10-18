@@ -96,7 +96,8 @@ data:
         "success": 0.0,
         "ts": 0.0,
         "duration": 0.0,
-        "error": "",
+        "error": "",  # texto completo, so para o log
+        "reason": "",  # rotulo curto e estavel, so para a metrica
     }
     LOCK = threading.Lock()
 
@@ -106,12 +107,31 @@ data:
         return start, (start + timedelta(days=32)).replace(day=1)
 
 
+    def error_reason(exc):
+        """Rotulo curto e ESTAVEL para o erro (o log guarda o texto completo).
+
+        Expor `str(exc)` como label parece pratico, mas cada falha carrega
+        valores que mudam (opc-request-id, OCID, hash) e cada valor novo vira uma
+        serie nova no Prometheus: o TSDB deste cluster Always Free cresceria sem
+        limite justamente quando o exporter mais falha. Codigo + status HTTP tem
+        um punhado de valores possiveis e diagnostica o suficiente
+        (ex.: `ServiceError 404 NotAuthorizedOrNotFound`).
+        """
+        status = getattr(exc, "status", None)
+        code = getattr(exc, "code", None)
+        return f"{type(exc).__name__} {status or ''} {code or ''}".strip()
+
+
     def esc(value):
         """Escapa valor de label no formato de exposição do Prometheus."""
         return str(value).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
 
 
     def summarize(client, start, end, query_type):
+        # Nada de `is_forecast`: no SDK 2.188 esse booleano não existe mais — a
+        # API separa realizado/previsto no campo `forecast` do modelo, e passá-lo
+        # levanta TypeError ANTES de qualquer chamada HTTP (foi o que travou o
+        # primeiro deploy deste exporter). Omitir = números realizados.
         details = oci.usage_api.models.RequestSummarizedUsagesDetails(
             tenant_id=TENANCY,
             time_usage_started=start,
@@ -119,7 +139,6 @@ data:
             granularity="MONTHLY",
             query_type=query_type,
             group_by=["service", "skuName", "unit"],
-            is_forecast=False,
         )
         return client.request_summarized_usages(details).data.items
 
@@ -236,12 +255,14 @@ data:
         head("oci_free_tier_scrape_duration_seconds", "Duracao do ultimo ciclo.")
         out.append(f"oci_free_tier_scrape_duration_seconds {s['duration']:.3f}")
 
-        # O erro vai como métrica (label) para aparecer no `kubectl logs`/Grafana
-        # sem transformar o exporter num serviço de log.
-        if s["error"]:
-            out.append(
-                f'oci_free_tier_scrape_error{{message="{esc(s["error"][:200])}"}} 1'
-            )
+        # Rotulo curto e de cardinalidade limitada (ver error_reason). O texto
+        # completo vai para o stdout do pod a cada ciclo falho.
+        head(
+            "oci_free_tier_scrape_error",
+            "Motivo curto da ultima falha de leitura (1 = falhou).",
+        )
+        if s["reason"]:
+            out.append(f'oci_free_tier_scrape_error{{reason="{esc(s["reason"])}"}} 1')
         return "\n".join(out) + "\n"
 
 
@@ -249,18 +270,28 @@ data:
         while True:
             started = time.time()
             error = ""
+            reason = ""
             success = 0.0
+            with LOCK:
+                prev_error = STATE["error"]
             try:
                 rows, total_cost, elapsed, total = cycle()
                 success = 1.0
+                if prev_error:
+                    print("[ciclo] leitura recuperada", flush=True)
             except Exception as exc:  # noqa: BLE001 - exporter não pode morrer
                 rows = total_cost = elapsed = total = None
                 error = f"{type(exc).__name__}: {exc}"
+                reason = error_reason(exc)
+                # Texto completo no log (o rótulo da métrica é enxuto de
+                # propósito); flush para aparecer em `kubectl logs` na hora.
+                print(f"[ciclo] falhou: {error}", flush=True)
             with LOCK:
                 STATE["success"] = success
                 STATE["ts"] = time.time()
                 STATE["duration"] = time.time() - started
                 STATE["error"] = error
+                STATE["reason"] = reason
                 if rows is not None:
                     STATE["rows"] = rows
                     STATE["total_cost"] = total_cost
@@ -316,7 +347,8 @@ spec:
           command: ["sh", "-c"]
           args:
             - >-
-              pip install --no-cache-dir --disable-pip-version-check oci==2.188.0
+              pip install --no-cache-dir --disable-pip-version-check
+              --only-binary=:all: oci==2.188.0
               && exec python /scripts/exporter.py
           env:
             - name: OCI_TENANCY_OCID
@@ -337,17 +369,28 @@ spec:
             limits:
               cpu: 300m
               memory: 256Mi
+          # O container instala o SDK da OCI no start (pip): ~2 a 5 min medidos
+          # neste nó. Por isso existe startupProbe — enquanto ele roda, a
+          # liveness fica desligada, então um pip lento nunca vira
+          # CrashLoopBackOff. Sem ele, liveness (120s + 3 falhas x 60s) mataria
+          # o pod aos ~4 min e a reinstalação recomeçaria do zero: loop infinito.
+          startupProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            periodSeconds: 15
+            failureThreshold: 40 # teto de 10 min, folga confortável
+          # Liveness/readiness do http.server em si (o ciclo na OCI é assíncrono:
+          # ciclo falho NÃO deixa o pod unhealthy — isso é assunto do alerta).
           readinessProbe:
             httpGet:
               path: /metrics
               port: metrics
-            initialDelaySeconds: 45
             periodSeconds: 30
           livenessProbe:
             httpGet:
               path: /metrics
               port: metrics
-            initialDelaySeconds: 120
             periodSeconds: 60
             failureThreshold: 3
           volumeMounts:
