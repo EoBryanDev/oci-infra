@@ -10,5 +10,8 @@ resources:
   # falha se o ObjectStore não existe) até esta correção.
   - objectstore.yaml
   - scheduledbackup.yaml
+  # Métricas do banco/plugin no Prometheus (o operator gerava um PodMonitor sem
+  # o label de descoberta; ver o comentário no próprio arquivo).
+  - podmonitor.yaml
   - provision-palpitai.yaml
   - provision-portfolio.yaml

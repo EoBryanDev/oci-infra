@@ -16,5 +16,9 @@ resources:
   - dashboards/free-tier.yaml
   - free-tier/exporter.yaml
   - free-tier/alerts.yaml
+  # Backup/arquivagem do Postgres (métricas do plugin, via PodMonitor do app
+  # postgres). Ver a nota sobre por que não se alerta pelos campos de status do
+  # Cluster dentro do arquivo.
+  - postgres/alerts.yaml
   - daily-report/configmap.yaml
   - daily-report/cronjob.yaml

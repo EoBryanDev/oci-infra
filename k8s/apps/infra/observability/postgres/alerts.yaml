@@ -1,0 +1,124 @@
+# Alertas de backup e arquivagem do Postgres.
+#
+# Por que existem: a migração para o plugin CNPG-I (18/10/2026) trocou QUEM
+# arquiva o WAL. Se a arquivagem quebrar, o WAL se acumula, o volume enche e o
+# banco para — e até agora isso não tinha alerta nenhum, porque o Prometheus
+# deste cluster não raspava o CNPG (ver podmonitor.yaml). Os três primeiros
+# sinais são independentes de propósito: nenhum deles sozinho cobre o outro.
+#
+# As métricas vêm da porta 9187 dos pods do banco. As de backup são as
+# `barman_cloud_*`, exportadas pelo sidecar do plugin, e são as corretas para o
+# método novo.
+#
+# Cuidado que motivou a escolha das expressões: os campos
+# `Cluster.status.lastSuccessfulBackup*` continuam zerados para backups feitos
+# via plugin (verificado em 18/10/2026 — o plugin reporta a janela de
+# recuperação no status do `ObjectStore`, em `serverRecoveryWindow`, não no
+# Cluster). Alertar por aqueles campos daria silêncio permanente: um alerta que
+# nunca dispara é pior que nenhum, porque dá sensação de cobertura.
+#
+# Rota: o Alertmanager do stack manda tudo para o Telegram, com
+# `send_resolved: true` (mesmo caminho dos alertas de Always Free).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: postgres-backups
+  namespace: monitoring
+  labels:
+    # Mesmo matchLabels do ruleSelector do Prometheus do stack.
+    release: kube-prometheus
+spec:
+  groups:
+    - name: postgres-backups
+      rules:
+        - alert: PostgresBackupStale
+          # O agendado roda a cada 4 dias (dias 1, 5, 9, ... do mês) com retenção
+          # de 1 semana. 6 dias dá folga para um disparo perdido sem gritar cedo:
+          # nesse ponto o último backup ainda existe (está perto de ser podado) e
+          # agir ainda salva a janela de recuperação.
+          # `max(...)` e não a série crua: se um dia houver réplica, o que importa
+          # é o backup mais recente do cluster.
+          expr: >-
+            time() - max(barman_cloud_cloudnative_pg_io_last_available_backup_timestamp)
+            > 6 * 24 * 3600
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              Postgres: último backup disponível há mais de 6 dias — janela de
+              recuperação encolhendo (retenção é de 1 semana).
+            runbook: >-
+              Ver o agendado e o último backup:
+              kubectl -n databases get scheduledbackup pg-main-backup
+              -o jsonpath='{.spec.schedule}';
+              kubectl -n databases get backup --sort-by=.metadata.creationTimestamp
+              | tail -3
+
+        - alert: PostgresBackupFailed
+          # Falha mais recente que o último sucesso. O campo é um timestamp e
+          # vale 0 quando nunca houve falha — daí a segunda condição, senão
+          # "nunca falhou, nunca teve backup" (0 > 0 é falso) e o alerta some
+          # justamente no pior caso.
+          expr: >-
+            barman_cloud_cloudnative_pg_io_last_failed_backup_timestamp
+            > barman_cloud_cloudnative_pg_io_last_available_backup_timestamp
+            and barman_cloud_cloudnative_pg_io_last_failed_backup_timestamp > 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              Postgres: o backup mais recente do plugin FALHOU (a última falha é
+              mais nova que o último sucesso).
+            runbook: >-
+              kubectl -n databases get backup -o custom-columns=NOME:.metadata.name,METODO:.spec.method,FASE:.status.phase | tail -5
+
+        - alert: PostgresWALArchivingFailing
+          # Arquivagem de WAL falhando AGORA.
+          #
+          # Deliberadamente NÃO é "último arquivamento há mais de X horas": o
+          # banco fica ocioso por horas, e o último WAL arquivado pode ser de
+          # 15:28 com o próximo só saindo às 17:03 sem nada errado — um alerta de
+          # frescor dispararia em falso todo dia útil. (Foi o que quase aconteceu
+          # ao investigar a migração.)
+          #
+          # O sinal correto é falha NOVA. Um problema real retenta a cada ~60s,
+          # ou seja ~60 falhas por hora; um blip isolado é retentado e resolvido.
+          # Daí o limiar em 2, que separa os dois casos.
+          expr: increase(cnpg_pg_stat_archiver_failed_count[1h]) > 2
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: >-
+              Postgres: arquivagem de WAL falhando ({{ printf "%.0f" $value }}
+              falhas na última hora). WAL parado enche o volume e derruba o banco.
+            runbook: >-
+              kubectl -n databases exec pg-main-1 -c postgres -- psql -c
+              "select * from pg_stat_archiver";
+              kubectl -n databases logs pg-main-1 -c plugin-barman-cloud --tail=50
+
+        - alert: PostgresBackupMetricsAbsent
+          # Monitor cego — o alerta mais importante dos quatro.
+          #
+          # Sem esta regra, perder o scrape (ou reverter a migração, quando as
+          # métricas `barman_cloud_*` deixam de existir) faz os outros três
+          # ficarem em silêncio — indistinguível de "está tudo bem". Mesma
+          # lógica do AlwaysFreeMonitorDown, e pela mesma razão: "sem alerta" só
+          # significa alguma coisa se alguém garantir que está olhando.
+          #
+          # `for: 30m` porque durante um rollout do banco o alvo desaparece por
+          # alguns minutos, e isso é normal.
+          expr: absent(barman_cloud_cloudnative_pg_io_last_available_backup_timestamp)
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              Postgres: métricas de backup não estão sendo coletadas — os alertas
+              de backup estão cegos (não confundir com "backup em dia").
+            runbook: >-
+              kubectl -n databases get podmonitor pg-main-instance-metrics;
+              kubectl -n databases get cluster pg-main
+              -o jsonpath='{.spec.plugins}'

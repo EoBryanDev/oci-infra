@@ -1,0 +1,44 @@
+# Métricas do Postgres (e do plugin de backup) no Prometheus.
+#
+# Por que este PodMonitor é escrito à mão:
+#
+# O operator gera um sozinho quando `Cluster.spec.monitoring.enablePodMonitor`
+# está ligado — e estava. O objeto que ele gera, porém, não leva o label
+# `release: kube-prometheus`, que é exatamente o matchLabels do
+# `podMonitorSelector` do Prometheus deste cluster. O Prometheus só enxerga
+# PodMonitor/PrometheusRule/ServiceMonitor com esse label.
+#
+# Resultado medido em 18/10/2026: existia um PodMonitor `pg-main` (criado pelo
+# operator, 28 dias) e NENHUMA métrica do CNPG no Prometheus — o scrape
+# simplesmente não era descoberto. Ou seja, as métricas do banco, incluindo as
+# que dizem quando foi o último backup, nunca chegaram a existir para alerta
+# nenhum.
+#
+# Não dá para corrigir por cima: o CNPG não aceita labels extras no objeto que
+# ele cria. Então o PodMonitor passa a ser explícito — o que também permite
+# desligar o campo `enablePodMonitor`, deprecado no CNPG 1.30.
+#
+# Nome diferente de `pg-main` de propósito: o PodMonitor do operator (mesmo nome,
+# mesmo namespace) é apagado de forma assíncrona quando o campo sai do Cluster.
+# Com o nome do operator haveria janela de conflito no apply; com nome próprio,
+# nenhuma. E como o objeto do operator não tem o label de descoberta, mesmo que
+# ele demore a sumir não há scrape duplicado.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: pg-main-instance-metrics
+  namespace: databases
+  labels:
+    release: kube-prometheus
+spec:
+  selector:
+    matchLabels:
+      cnpg.io/cluster: pg-main
+      # Só pods de instância (exclui o pooler, que tem métricas próprias).
+      cnpg.io/podRole: instance
+  podMetricsEndpoints:
+    # Porta 9187 do container `postgres`: o collector do instance-manager.
+    # Serve tanto as métricas de Postgres (`cnpg_pg_*`) quanto as do plugin de
+    # backup (`barman_cloud_cloudnative_pg_io_*`, exportadas pelo sidecar).
+    - port: metrics
+      interval: 60s

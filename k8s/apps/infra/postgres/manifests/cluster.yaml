@@ -34,8 +34,11 @@ spec:
       owner: app
       # Sem `secret:` custom: o operator cria `pg-main-app` sozinho.
       # (Nome custom exigiria Secret pré-existente; o operator não gera.)
-  monitoring:
-    enablePodMonitor: true
+  # `monitoring.enablePodMonitor` foi REMOVIDO em 18/10/2026 (deprecado no CNPG
+  # 1.30). O equivalente explícito agora vive em podmonitor.yaml — e lá está
+  # explicado por que o objeto que o operator gerava não servia: faltava o label
+  # `release: kube-prometheus` que o Prometheus deste cluster exige, então
+  # NENHUMA métrica do banco era coletada (nem as de backup).
   # ---------------------------------------------------------------------------
   # Backup pelo plugin CNPG-I (Barman Cloud Plugin).
   #
