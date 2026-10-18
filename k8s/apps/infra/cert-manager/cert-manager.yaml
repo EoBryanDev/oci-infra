@@ -1,0 +1,81 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager
+  namespace: argocd
+  annotations:
+    # Mesmo motivo do cnpg-operator/kube-prometheus: schema 1.36 vs Argo 2.14.
+    argocd.argoproj.io/compare-options: ServerSideDiff=true
+spec:
+  project: default
+  source:
+    repoURL: https://charts.jetstack.io
+    chart: cert-manager
+    targetRevision: v1.21.2
+    helm:
+      valuesObject:
+        # CRDs vêm em templates/crd-*.yaml (não no diretório especial crds/),
+        # então o Argo aplica cada um como recurso normal — cada CRD tem bem
+        # menos que o limite de 256KB do apply client-side, ao contrário dos
+        # CRDs do CNPG (que por isso exigem bootstrap manual em cnpg-system).
+        crds:
+          enabled: true
+        # Requests/limits explícitos: cert-manager entra num cluster Always Free
+        # de 2 nós (2 OCPU/12 GB cada) que já roda banco, Prometheus e apps.
+        # Aqui ele é dependência de UMA coisa (o plugin de backup), não infra
+        # crítica — os valores abaixo são o suficiente.
+        resources:
+          requests:
+            cpu: 10m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 160Mi
+        webhook:
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+        cainjector:
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 192Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+  # O cainjector escreve o `caBundle` dentro do ValidatingWebhookConfiguration
+  # e do MutatingWebhookConfiguration DEPOIS do apply. Sem este ignore, o Argo
+  # veria divergência permanente e o selfHeal "consertaria" o caBundle de volta
+  # para vazio — derrubando os webhooks. Ignorar o campo é o que permite
+  # coexistir com o cainjector.
+  ignoreDifferences:
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      jqPathExpressions:
+        - ".webhooks[] | .clientConfig.caBundle"
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+      jqPathExpressions:
+        - ".webhooks[] | .clientConfig.caBundle"
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+    syncOptions:
+      - CreateNamespace=true
+      # SSA evita o apply client-side em recursos com schema grande e mantém o
+      # mesmo comportamento usado no resto do stack.
+      - ServerSideApply=true
