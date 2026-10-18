@@ -1,0 +1,86 @@
+# Alertas proativos do Always Free.
+#
+# Objetivo: avisar ANTES da conta chegar — não depois. Os três sinais foram
+# escolhidos para pegar as duas falhas que já aconteceram nesta tenancy:
+#
+#   1. AlwaysFreeProjectedOverage — "no ritmo de agora, o mês fecha acima da
+#      franquia". Foi exatamente o que faltou no incidente dos backups: o cron
+#      de 5 campos passou a rodar de hora em hora e nada avisou; a fatura
+#      apareceu no fim do mês, quando o ORÇAMENTO (R$1) disparou. Com esta
+#      regra, a projeção estoura no primeiro dia, não no dia 31.
+#      A projeção vem pronta do exporter (média do mês até agora extrapolada
+#      para o fim do mês), de propósito: `predict_linear` sobre janela curta é
+#      dominado por rajada de backup e daria alarme falso.
+#
+#   2. AlwaysFreeSpending — "está saindo dinheiro". É o sinal de terra:
+#      independe de eu ter mapeado corretamente a franquia de cada SKU. Se um
+#      serviço fora do free começar a consumir, aparece aqui.
+#
+#   3. AlwaysFreeMonitorDown — o monitor morreu. Sem isto, "sem alerta" fica
+#      ambíguo entre "nada gastou" e "ninguém está olhando".
+#
+# Rota: o Alertmanager do stack manda tudo para o Telegram (receiver
+# `telegram`), com `send_resolved: true`. Nada extra a configurar aqui além
+# das anotações `summary`, que são o corpo da mensagem (telegram.tmpl).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: always-free
+  namespace: monitoring
+  labels:
+    # Mesmo matchLabels que o ServiceMonitor do traefik: é o que o Prometheus
+    # do kube-prometheus-stack usa para selecionar regras (ruleSelector).
+    release: kube-prometheus
+spec:
+  groups:
+    - name: always-free
+      rules:
+        - alert: AlwaysFreeProjectedOverage
+          # >1 = a projeção de fim de mês passa da franquia.
+          expr: oci_free_tier_projected_month_end / oci_free_tier_limit > 1
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              {{ $labels.resource }}: projeção de fim de mês em
+              {{ printf "%.0f" $value }}x a franquia Always Free — vai faltar
+              espaço antes do dia 1º.
+
+        - alert: AlwaysFreeSpending
+          # Qualquer centavo acumulado no mês. O teto de referência é o budget
+          # de R$1 (terraform/modules/finops/budget.tf), que manda e-mail;
+          # aqui a mensagem chega no Telegram e mais cedo (>= R$0,01).
+          expr: oci_free_tier_total_cost_brl > 0
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              Gasto acumulado no mês: R$ {{ printf "%.2f" $value }}.
+              Consumo fora do Always Free em algum SKU — ver painel
+              "Always Free" no Grafana para saber qual.
+
+        - alert: AlwaysFreeSpendingHigh
+          # Dois sinais do mesmo problema em canais diferentes, de propósito:
+          # o budget avisa por e-mail em R$1 (regra ACTUAL/FORECAST), e este
+          # avisa no Telegram com o mesmo limiar. O Telegram é onde o usuário
+          # acompanha o resto da operação.
+          expr: oci_free_tier_total_cost_brl >= 1
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: >-
+              Gasto acumulado passou de R$1 (R$ {{ printf "%.2f" $value }}) —
+              teto simbólico do budget estourado.
+
+        - alert: AlwaysFreeMonitorDown
+          expr: absent(oci_free_tier_scrape_success) or oci_free_tier_scrape_success == 0
+          for: 2h
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              Exporter do Always Free sem publicar há 2h: o consumo do free tier
+              está às cegas (não confundir com "sem consumo").

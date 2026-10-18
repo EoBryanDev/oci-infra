@@ -52,6 +52,54 @@ data:
         return f"{n:.1f} TB"
 
 
+    def fmt_br(n):
+        # Separador no padrao BR (o relatorio e lido no celular).
+        if abs(n) >= 100:
+            return f"{n:,.0f}".replace(",", ".")
+        return f"{n:.2f}".replace(".", ",")
+
+
+    def free_tier_lines():
+        """Secao Always Free, no formato Recurso (consumido/franquia unidade).
+
+        Le as metricas do exporter (k8s/apps/infra/observability/free-tier/).
+        Sem exporter publicado ainda, a secao e omitida em vez de sair vazia.
+        """
+        used = q("oci_free_tier_used")
+        if not used:
+            return []
+        limits = {
+            r["metric"]["resource"]: float(r["value"][1])
+            for r in q("oci_free_tier_limit")
+        }
+        cost = scalar("oci_free_tier_total_cost_brl")
+        rows = [
+            (
+                r["metric"]["resource"],
+                float(r["value"][1]),
+                limits.get(r["metric"]["resource"]),
+                r["metric"].get("unit", ""),
+            )
+            for r in used
+        ]
+        # Ordena por risco (maior % da franquia primeiro); quem nao tem franquia
+        # mapeada vai para o fim, mas continua visivel para nao esconder gasto.
+        rows.sort(key=lambda row: -(row[1] / row[2]) if row[2] else 0)
+
+        lines = ["", "*Always Free (OCI) - consumo do mes*"]
+        for sku, u, lim, unit in rows[:6]:
+            if lim:
+                pct = 100 * u / lim
+                flag = " \U0001F6A8" if pct >= 100 else (" \u26A0\uFE0F" if pct >= 80 else "")
+                lines.append(f"- {sku} ({fmt_br(u)}/{fmt_br(lim)} {unit}) {pct:.0f}%{flag}")
+            else:
+                lines.append(f"- {sku}: {fmt_br(u)} {unit} (sem franquia mapeada)")
+        if len(rows) > 6:
+            lines.append(f"- (+{len(rows) - 6} recursos, ver painel Always Free)")
+        lines.append(f"Custo acumulado no mes: R$ {cost:.2f}")
+        return lines
+
+
     def main():
         cpu = scalar('avg(avg_over_time(rate(node_cpu_seconds_total{mode!="idle"}[5m])[24h:5m]))') * 100
         ram = scalar("avg(avg_over_time((1 - node_memory_MemAvailable_bytes/node_memory_MemTotal_bytes)[24h:5m]))") * 100
@@ -95,6 +143,8 @@ data:
             lines += [f"- {pod}: {n:.0f}" for pod, n in bad]
         else:
             lines.append("Sem restarts nas apps. Quinze pras dez, tudo certo.")
+
+        lines += free_tier_lines()
 
         msg = "\n".join(lines)
         req = urllib.request.Request(

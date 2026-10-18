@@ -1,0 +1,399 @@
+# Monitor proativo do Always Free (OCI) -> métricas no Prometheus.
+#
+# Por que existe: o incidente dos backups (cron de 5 campos = backup de hora em
+# hora, sem retenção) só foi descoberto pelo ORÇAMENTO, no fim do mês, quando o
+# dinheiro já tinha saído. O orçamento é um alarme de incêndio; este exporter é
+# a fumaça: publica o consumo de cada recurso Always Free no Prometheus, de
+# onde saem painel no Grafana, alerta no Alertmanager/Telegram e a seção do
+# relatório diário.
+#
+# Regras de ouro (a razão de cada escolha):
+#
+#   1. FALA SÓ COM A USAGE API (e nada mais). É API de metadados, não faturada.
+#      O exporter NUNCA lista ou baixa objetos: a franquia de Object Storage
+#      (50.000 requests e 20 GB/mês) é justamente o que ele mede — um monitor
+#      que a consome envenenaria a própria medição. (Durante o diagnóstico do
+#      incidente, `oci os object list` gastou dezenas de requests por varredura.
+#      Nada disso aqui: 2 chamadas de leitura a cada 15 min, ~192/dia, todas
+#      fora do SKU faturado.)
+#   2. INSTANCE PRINCIPAL: a credencial é a identidade da própria VM (dynamic
+#      group `k3s-nodes`, ver terraform/modules/finops/free-tier-observer.tf).
+#      Zero segredo no cluster, zero chave de API no Git/state para rotacionar.
+#   3. A PROJEÇÃO É CALCULADA AQUI, não em PromQL. `predict_linear` sobre janela
+#      curta é dominado por rajada de backup e daria alarme falso em todo dia
+#      de backup; a média do mês extrapolada é à prova de rajada. Foi este
+#      número que teria pegado o cron errado no primeiro dia.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: free-tier-exporter-script
+  namespace: monitoring
+data:
+  exporter.py: |-
+    """Exporter Prometheus do consumo Always Free da OCI (Usage API).
+
+    Só stdlib + SDK `oci`. Env: OCI_TENANCY_OCID, OCI_REGION, REFRESH_SECONDS,
+    PORT. Autentica por instance principal (sem segredo).
+    """
+    import os
+    import threading
+    import time
+    import urllib.error
+    import urllib.request
+    from datetime import datetime, timedelta, timezone
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    import oci
+
+    TENANCY = os.environ["OCI_TENANCY_OCID"]
+    REGION = os.environ.get("OCI_REGION", "us-phoenix-1")
+    REFRESH = int(os.environ.get("REFRESH_SECONDS", "900"))
+    PORT = int(os.environ.get("PORT", "9101"))
+
+    # SKU (nome exato devolvido pela Usage API) -> como apresentar o consumo:
+    #   unit      = unidade de medida do relatório
+    #   limit     = franquia mensal do Always Free. "hours_in_month" e
+    #               "10x_hours_in_month" resolvem no ciclo porque o teto de
+    #               Load Balancer é por hora (1 LB e 10 Mbps).
+    #   mult      = conversão da unidade crua (Object Storage devolve
+    #               "10K Requests": 40,66 = 406.668 requests)
+    #   gb_months = True quando a API acumula "GB Months". Aí o consumo
+    #               comparável à franquia é a MÉDIA do mês (cru × mês/decorrido),
+    #               não o acumulado — senão a linha apareceria valendo 1/3 do
+    #               disco real só porque o mês não acabou.
+    #
+    # Compute: 3.000 OCPU-horas + 18.000 GB-horas = 4 OCPU + 24 GB rodando o mês
+    # inteiro (31 dias = 2.976 OCPU-h e 17.856 GB-h, dentro por 0,8%).
+    # ATENÇÃO: a página oficial "Always Free Resources" cita 1.500/9.000
+    # (2 OCPU/12 GB) "para todas as tenancies"; o billing desta tenancy, porém,
+    # cobra R$ 0,00 com 1.686 OCPU-horas e 10.116 GB-horas acumulados em 18 dias
+    # — franquia efetiva = 4 OCPU/24 GB, o mesmo que a quota
+    # `free-tier-guardrails` assume. Se a OCI passar a aplicar a regra menor, o
+    # alerta AlwaysFreeSpending pega a diferença no primeiro centavo (é para
+    # isso que ele olha dinheiro, e não só proporção).
+    FREE_TIER = {
+        "Object Storage - Requests": dict(unit="requests", limit=50_000, mult=10_000),
+        "Object Storage - Storage": dict(unit="GB", limit=20, gb_months=True),
+        "Block Volume - Free": dict(unit="GB", limit=200, gb_months=True),
+        "Standard - A1": dict(unit="OCPU-horas", limit=3_000),
+        "Standard - A1 - Memory": dict(unit="GB-horas", limit=18_000),
+        "Flexible Load Balancer Base": dict(unit="LB-horas", limit="hours_in_month"),
+        "Flexible Load Balancer Bandwidth": dict(
+            unit="Mbps-horas", limit="10x_hours_in_month"
+        ),
+        "Outbound Data Transfer Zone 1": dict(unit="GB", limit=10_240),
+        "Monitoring Service - Retrieval": dict(unit="milhoes de datapoints", limit=1_000),
+    }
+
+    # Última leitura boa. Um ciclo que falha NÃO apaga isto: número velho é
+    # melhor que número nenhum, desde que rotulado (success=0 -> o alerta
+    # AlwaysFreeMonitorDown avisa que a medição parou).
+    STATE = {
+        "rows": {},
+        "total_cost": 0.0,
+        "elapsed": 0.0,
+        "total": 0.0,
+        "success": 0.0,
+        "ts": 0.0,
+        "duration": 0.0,
+        "error": "",
+    }
+    LOCK = threading.Lock()
+
+
+    def month_window(now):
+        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        return start, (start + timedelta(days=32)).replace(day=1)
+
+
+    def esc(value):
+        """Escapa valor de label no formato de exposição do Prometheus."""
+        return str(value).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+
+
+    def summarize(client, start, end, query_type):
+        details = oci.usage_api.models.RequestSummarizedUsagesDetails(
+            tenant_id=TENANCY,
+            time_usage_started=start,
+            time_usage_ended=end,
+            granularity="MONTHLY",
+            query_type=query_type,
+            group_by=["service", "skuName", "unit"],
+            is_forecast=False,
+        )
+        return client.request_summarized_usages(details).data.items
+
+
+    def cycle():
+        now = datetime.now(timezone.utc)
+        start, end = month_window(now)
+        elapsed = max((now - start).total_seconds(), 1.0)
+        total = (end - start).total_seconds()
+        hours_in_month = total / 3600.0
+        to_month_end = total / elapsed  # extrapolação linear para o fim do mês
+
+        signer = oci.auth.signers.InstancePrincipalsSecurityTokenSigner()
+        client = oci.usage_api.UsageapiClient({"region": REGION}, signer=signer)
+
+        rows = {}
+        for item in summarize(client, start, end, "USAGE"):
+            sku = item.sku_name or item.service
+            raw = float(item.computed_quantity or 0)
+            if raw <= 0:
+                continue
+            cfg = FREE_TIER.get(sku) or {}
+            mult = float(cfg.get("mult", 1))
+            limit = cfg.get("limit")
+            if limit == "hours_in_month":
+                limit = hours_in_month
+            elif limit == "10x_hours_in_month":
+                limit = 10 * hours_in_month
+            rows[sku] = {
+                "unit": cfg.get("unit") or item.unit or "unidade",
+                # GB Months -> média do mês; o resto -> acumulado do mês.
+                "used": raw * mult * (to_month_end if cfg.get("gb_months") else 1),
+                "projected": raw * mult * to_month_end,
+                "limit": limit,
+                "cost": 0.0,
+            }
+
+        total_cost = 0.0
+        for item in summarize(client, start, end, "COST"):
+            amount = float(item.computed_amount or 0)
+            if amount <= 0:
+                continue
+            total_cost += amount
+            sku = item.sku_name or item.service
+            if sku in rows:
+                rows[sku]["cost"] = amount
+            else:
+                # Custo sem uso medido no mês corrente: cria a linha assim mesmo,
+                # para o painel mostrar de onde vem o dinheiro.
+                rows[sku] = {
+                    "unit": item.unit or "unidade",
+                    "used": 0.0,
+                    "projected": 0.0,
+                    "limit": None,
+                    "cost": amount,
+                }
+
+        return rows, total_cost, elapsed, total
+
+
+    def render():
+        with LOCK:
+            s = dict(STATE)
+        out = []
+
+        def head(name, help_text):
+            out.append(f"# HELP {name} {help_text}")
+            out.append(f"# TYPE {name} gauge")
+
+        head(
+            "oci_free_tier_used",
+            "Consumo Always Free no mes corrente, na unidade da franquia.",
+        )
+        for sku, r in sorted(s["rows"].items()):
+            out.append(
+                f'oci_free_tier_used{{resource="{esc(sku)}",unit="{esc(r["unit"])}"}} {r["used"]:.6g}'
+            )
+
+        head("oci_free_tier_limit", "Franquia mensal Always Free do recurso.")
+        for sku, r in sorted(s["rows"].items()):
+            if r["limit"] is not None:
+                out.append(
+                    f'oci_free_tier_limit{{resource="{esc(sku)}",unit="{esc(r["unit"])}"}} {r["limit"]:.6g}'
+                )
+
+        head(
+            "oci_free_tier_projected_month_end",
+            "Projecao de fim de mes pelo ritmo do mes ate agora (media, nao janela curta).",
+        )
+        for sku, r in sorted(s["rows"].items()):
+            out.append(
+                f'oci_free_tier_projected_month_end{{resource="{esc(sku)}",unit="{esc(r["unit"])}"}} {r["projected"]:.6g}'
+            )
+
+        head("oci_free_tier_cost_brl", "Custo acumulado no mes por SKU (BRL).")
+        for sku, r in sorted(s["rows"].items()):
+            out.append(f'oci_free_tier_cost_brl{{resource="{esc(sku)}"}} {r["cost"]:.6g}')
+
+        head("oci_free_tier_total_cost_brl", "Custo total acumulado no mes (BRL).")
+        out.append(f"oci_free_tier_total_cost_brl {s['total_cost']:.6g}")
+
+        head("oci_free_tier_window_elapsed_seconds", "Segundos decorridos do mes corrente.")
+        out.append(f"oci_free_tier_window_elapsed_seconds {s['elapsed']:.0f}")
+
+        head("oci_free_tier_window_total_seconds", "Duracao total do mes corrente.")
+        out.append(f"oci_free_tier_window_total_seconds {s['total']:.0f}")
+
+        head("oci_free_tier_scrape_success", "1 se o ultimo ciclo leu a Usage API; 0 se falhou.")
+        out.append(f"oci_free_tier_scrape_success {s['success']:.0f}")
+
+        head("oci_free_tier_scrape_timestamp_seconds", "Fim do ultimo ciclo.")
+        out.append(f"oci_free_tier_scrape_timestamp_seconds {s['ts']:.0f}")
+
+        head("oci_free_tier_scrape_duration_seconds", "Duracao do ultimo ciclo.")
+        out.append(f"oci_free_tier_scrape_duration_seconds {s['duration']:.3f}")
+
+        # O erro vai como métrica (label) para aparecer no `kubectl logs`/Grafana
+        # sem transformar o exporter num serviço de log.
+        if s["error"]:
+            out.append(
+                f'oci_free_tier_scrape_error{{message="{esc(s["error"][:200])}"}} 1'
+            )
+        return "\n".join(out) + "\n"
+
+
+    def refresher():
+        while True:
+            started = time.time()
+            error = ""
+            success = 0.0
+            try:
+                rows, total_cost, elapsed, total = cycle()
+                success = 1.0
+            except Exception as exc:  # noqa: BLE001 - exporter não pode morrer
+                rows = total_cost = elapsed = total = None
+                error = f"{type(exc).__name__}: {exc}"
+            with LOCK:
+                STATE["success"] = success
+                STATE["ts"] = time.time()
+                STATE["duration"] = time.time() - started
+                STATE["error"] = error
+                if rows is not None:
+                    STATE["rows"] = rows
+                    STATE["total_cost"] = total_cost
+                    STATE["elapsed"] = elapsed
+                    STATE["total"] = total
+            time.sleep(REFRESH)
+
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802 - API do http.server
+            if self.path.split("?")[0] not in ("/metrics", "/"):
+                self.send_response(404)
+                self.end_headers()
+                return
+            body = render().encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass  # silêncio: log por scrape só polui
+
+
+    if __name__ == "__main__":
+        threading.Thread(target=refresher, daemon=True).start()
+        ThreadingHTTPServer(("", PORT), Handler).serve_forever()
+---
+# Deployment enxuto: imagem pública (mesma família do daily-report), script em
+# ConfigMap (nada de imagem própria para construir/publicar) e requests baixos
+# — o cluster é Always Free de 4 OCPU/24 GB e já roda banco, Prometheus e apps.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: free-tier-exporter
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: free-tier-exporter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: free-tier-exporter
+    spec:
+      containers:
+        - name: exporter
+          image: python:3.13-alpine
+          # `oci` é instalado no start (~30s): o SDK é o que traz a assinatura
+          # da instance principal. Versão pinada para o build ser reprodutível.
+          command: ["sh", "-c"]
+          args:
+            - >-
+              pip install --no-cache-dir --disable-pip-version-check oci==2.188.0
+              && exec python /scripts/exporter.py
+          env:
+            - name: OCI_TENANCY_OCID
+              value: ocid1.tenancy.oc1..aaaaaaaatn5ku34tltthrqfw36hiug6xspae7tk54j3xlyebe4mht7cevvha
+            - name: OCI_REGION
+              value: us-phoenix-1
+            # 15 min: a Usage API atualiza por hora e é de graça; não há motivo
+            # para apertar. 96 ciclos/dia = 96 leituras de metadados.
+            - name: REFRESH_SECONDS
+              value: "900"
+          ports:
+            - name: metrics
+              containerPort: 9101
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 45
+            periodSeconds: 30
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 120
+            periodSeconds: 60
+            failureThreshold: 3
+          volumeMounts:
+            - name: script
+              mountPath: /scripts
+      volumes:
+        - name: script
+          configMap:
+            name: free-tier-exporter-script
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: free-tier-exporter
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: free-tier-exporter
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: free-tier-exporter
+  ports:
+    - name: metrics
+      port: 9101
+      targetPort: metrics
+      protocol: TCP
+---
+# Mesmo padrão do traefik-metrics: ServiceMonitor no ns do Prometheus com o
+# label que o stack usa para descoberta.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: free-tier-exporter
+  namespace: monitoring
+  labels:
+    release: kube-prometheus
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: free-tier-exporter
+  namespaceSelector:
+    matchNames:
+      - monitoring
+  endpoints:
+    - port: metrics
+      interval: 60s
+      # O exporter serve cache; o ciclo na OCI roda a cada 15 min. Scrape de 60s
+      # só garante que o alerta reaja rápido quando o ciclo falhar.
+      scrapeTimeout: 10s

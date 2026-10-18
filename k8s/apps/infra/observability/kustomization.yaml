@@ -13,5 +13,8 @@ resources:
   - dashboards/argocd-sync.yaml
   - dashboards/apps.yaml
   - dashboards/traefik-fluxo.yaml
+  - dashboards/free-tier.yaml
+  - free-tier/exporter.yaml
+  - free-tier/alerts.yaml
   - daily-report/configmap.yaml
   - daily-report/cronjob.yaml

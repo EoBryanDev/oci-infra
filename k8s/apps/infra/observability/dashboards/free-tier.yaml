@@ -1,0 +1,163 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dashboard-free-tier
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1" # sidecar do stack importa automaticamente
+data:
+  free-tier.json: |-
+    {
+      "title": "Always Free (OCI)",
+      "uid": "free-tier",
+      "schemaVersion": 39,
+      "version": 1,
+      "time": { "from": "now-30d", "to": "now" },
+      "panels": [
+        {
+          "title": "Consumo do mês por recurso (consumido / franquia)",
+          "type": "table",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 10, "w": 24, "x": 0, "y": 0 },
+          "targets": [
+            { "refId": "A", "expr": "oci_free_tier_used", "instant": true, "format": "table" },
+            { "refId": "B", "expr": "oci_free_tier_limit", "instant": true, "format": "table" },
+            { "refId": "C", "expr": "oci_free_tier_projected_month_end", "instant": true, "format": "table" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "align": "auto", "cellOptions": { "type": "auto" }, "filterable": true }
+            },
+            "overrides": [
+              { "matcher": { "id": "byName", "options": "resource" }, "properties": [ { "id": "displayName", "value": "Recurso" }, { "id": "custom.width", "value": 320 } ] },
+              { "matcher": { "id": "byName", "options": "unit" }, "properties": [ { "id": "displayName", "value": "Unidade" }, { "id": "custom.width", "value": 180 } ] },
+              {
+                "matcher": { "id": "byRegexp", "options": "Value #?A" },
+                "properties": [
+                  { "id": "displayName", "value": "Consumido" },
+                  { "id": "decimals", "value": 2 },
+                  { "id": "custom.cellOptions", "value": { "type": "color-text" } },
+                  { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "color": "green", "value": null } ] } }
+                ]
+              },
+              {
+                "matcher": { "id": "byRegexp", "options": "Value #?B" },
+                "properties": [
+                  { "id": "displayName", "value": "Franquia" },
+                  { "id": "decimals", "value": 2 }
+                ]
+              },
+              {
+                "matcher": { "id": "byRegexp", "options": "Value #?C" },
+                "properties": [
+                  { "id": "displayName", "value": "Projeção fim do mês" },
+                  { "id": "decimals", "value": 2 },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": { "type": "color-text" }
+                  },
+                  {
+                    "id": "thresholds",
+                    "value": {
+                      "mode": "absolute",
+                      "steps": [
+                        { "color": "green", "value": null },
+                        { "color": "yellow", "value": 1 },
+                        { "color": "red", "value": 1 }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "title": "Custo acumulado no mês (R$) — guarda-corpo do budget de R$1",
+          "type": "stat",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 6, "w": 8, "x": 0, "y": 10 },
+          "targets": [{ "refId": "A", "expr": "oci_free_tier_total_cost_brl", "instant": true }],
+          "fieldConfig": {
+            "defaults": {
+              "decimals": 2,
+              "unit": "currencyBRL",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 0.01 },
+                  { "color": "red", "value": 1 }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "title": "Projeção de fim de mês × franquia (maior risco)",
+          "type": "stat",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 6, "w": 8, "x": 8, "y": 10 },
+          "targets": [
+            { "refId": "A", "expr": "max(oci_free_tier_projected_month_end / oci_free_tier_limit)", "instant": true }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "decimals": 2,
+              "unit": "percentunit",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 0.8 },
+                  { "color": "red", "value": 1 }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "title": "Monitor ativo",
+          "type": "stat",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 6, "w": 8, "x": 16, "y": 10 },
+          "targets": [{ "refId": "A", "expr": "oci_free_tier_scrape_success", "instant": true }],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [
+                { "type": "value", "options": { "0": { "text": "sem leitura", "color": "red" }, "1": { "text": "OK", "color": "green" } } }
+              ],
+              "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null } ] }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "title": "% da franquia ao longo do mês (por recurso)",
+          "type": "timeseries",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 9, "w": 24, "x": 0, "y": 16 },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "100 * oci_free_tier_used / oci_free_tier_limit",
+              "legendFormat": "{{ resource }}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "custom": { "lineWidth": 1, "fillOpacity": 8, "showPoints": "never" }
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byName", "options": "100%" },
+                "properties": [{ "id": "custom.lineStyle", "value": { "dash": [8, 4], "fill": "dash" } }]
+              }
+            ]
+          }
+        }
+      ]
+    }
