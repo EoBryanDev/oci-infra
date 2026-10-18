@@ -3,6 +3,12 @@ kind: Kustomization
 resources:
   - ns.yaml
   - cluster.yaml
+  # O destino de backup é um CR próprio desde a migração para o plugin CNPG-I.
+  # Tem de estar NESTA lista: o ArgoCD detecta o kustomization.yaml e renderiza
+  # só o que está aqui — um arquivo .yaml solto no diretório é ignorado. Foi
+  # exatamente esse esquecimento que deixou o operator em loop (o hook do plugin
+  # falha se o ObjectStore não existe) até esta correção.
+  - objectstore.yaml
   - scheduledbackup.yaml
   - provision-palpitai.yaml
   - provision-portfolio.yaml
