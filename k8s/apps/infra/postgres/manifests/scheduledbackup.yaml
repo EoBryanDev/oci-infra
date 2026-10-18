@@ -1,10 +1,21 @@
 apiVersion: postgresql.cnpg.io/v1
 kind: ScheduledBackup
 metadata:
-  name: pg-main-daily
+  name: pg-main-backup
   namespace: databases
 spec:
-  schedule: "0 4 * * *" # 04:00 UTC todos os dias
+  # CUIDADO: o operator (robfig/cron v1) aceita 5 OU 6 campos. Com 5 campos ele
+  # assume o PRIMEIRO como SEGUNDOS e deixa o dia-da-semana no default "*":
+  #   "0 4 * * *"  ->  Second=0 Minute=4 Hour=*  ->  backup DE HORA EM HORA às :04
+  # (foi assim que 24 backups/dia entraram no bucket e estouraram o budget).
+  # Sempre 6 campos: segundos minuto hora dia-do-mês mês dia-da-semana.
+  # "0 0 4 */4 * *" = 04:00:00 UTC nos dias 1,5,9,13,17,21,25,29 (a cada 4 dias).
+  schedule: "0 0 4 */4 * *"
+  # `immediate` só é honrado na criação do objeto (enquanto status.lastCheckTime
+  # é nulo), então dispara UM backup agora — que por sua vez faz o operator
+  # aplicar o `retentionPolicy` do Cluster e podar o histórico acumulado.
+  # Fica `true` de propósito: se o objeto for recriado, refaz backup na hora.
+  immediate: true
   # none = backups sobrevivem à deleção do Cluster/ScheduledBackup.
   # É o que permite restore após desastre (valores válidos: none/self/cluster).
   backupOwnerReference: none
