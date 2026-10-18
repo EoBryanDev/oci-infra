@@ -24,8 +24,19 @@ resource "oci_identity_dynamic_group" "cluster_nodes" {
   name           = "k3s-nodes"
   description    = "Instancias do cluster k3s (leitura de consumo/custo do Always Free)"
 
-  # As instâncias (k3s-master/k3s-worker) vivem no compartment raiz da tenancy.
-  # Se um dia migrarem de compartment, este é o único ponto a ajustar.
+  # Escopo: por compartment, não por OCID. Hoje o compartment raiz contém
+  # exatamente k3s-master e k3s-worker, então na prática são elas.
+  #
+  # O que isso abre, dito sem eufemismo: QUALQUER instância criada no
+  # compartment raiz herda automaticamente `read usage-reports` e
+  # `read usage-budgets`. É leitura de metadados de billing — não dá acesso a
+  # recurso nenhum, não tem verbo de escrita e não toca o Object Storage — mas é
+  # mais largo que "só os dois nós" e não deve ser lido como se fosse.
+  #
+  # Por que não fixar os dois OCIDs: um nó recriado ganha OCID novo e o monitor
+  # fica cego em silêncio (o `AlwaysFreeMonitorDown` pega em 2h, mas por um
+  # defeito que eu mesmo introduzi). Preferi o escopo que sobrevive a um rebuild
+  # de nó, com o custo acima explícito. Se o escopo tiver de apertar, é aqui.
   matching_rule = "All {instance.compartment.id = '${var.tenancy_ocid}'}"
 }
 
