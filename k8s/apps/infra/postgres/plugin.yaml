@@ -1,0 +1,57 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cnpg-plugin-barman-cloud
+  namespace: argocd
+  annotations:
+    # Mesmo motivo do cnpg-operator: schema 1.36 vs Argo 2.14.
+    argocd.argoproj.io/compare-options: ServerSideDiff=true
+spec:
+  project: default
+  source:
+    repoURL: https://cloudnative-pg.github.io/charts
+    chart: plugin-barman-cloud
+    # Chart 0.8.1 = plugin v0.15.1 (appVersion). Exige CNPG >= 1.26 (temos o
+    # 1.30.0 do chart cloudnative-pg 0.29.0) e cert-manager (Application
+    # `cert-manager`, em k8s/apps/infra/cert-manager/).
+    targetRevision: 0.8.1
+    helm:
+      valuesObject:
+        # CRD `objectstores.barmancloud.cnpg.io` (o CR que substitui o
+        # `spec.backup.barmanObjectStore` do Cluster). Vem em templates/, então
+        # o Argo aplica como recurso normal do app.
+        crds:
+          create: true
+        # Os certificados mTLS operador <-> plugin. `createIssuer: true` cria um
+        # Issuer selfSigned dentro do namespace do plugin: nada sai da tenancy,
+        # nenhuma CA externa envolvida.
+        certificate:
+          createIssuer: true
+        # Enxuto de propósito: o plugin roda num nó Always Free que também
+        # hospeda o banco. O trabalho pesado de backup roda no sidecar injetado
+        # no pod do Postgres (image sidecarImage), não neste Deployment.
+        resources:
+          requests:
+            cpu: 20m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 192Mi
+  destination:
+    server: https://kubernetes.default.svc
+    # OBRIGATÓRIO: o operator descobre o plugin por um Service com o label
+    # `cnpg.io/pluginName` NO MESMO namespace dele (cnpg-system).
+    namespace: cnpg-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
