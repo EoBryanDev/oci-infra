@@ -40,3 +40,19 @@ spec:
   # "1w" = janela de recuperação de 7 dias: poda o backlog de hora em hora e
   # mantém ~2 backups na cadência de 4 dias. Formato: ^[1-9][0-9]*[dwm]$.
   retentionPolicy: "1w"
+  # A retention não é aplicada só quando termina um backup: o sidecar a executa
+  # num laço próprio, a cada `retentionPolicyIntervalSeconds` (default 300s).
+  # MEDIDO em 19/10/2026: 279 execuções em 24h, cada uma varrendo o prefixo
+  # (~257 requests com os 140 backups que o cron antigo deixou) => ~71.600
+  # requests/dia, 16,8x a franquia mensal de 50.000 do Object Storage. Ou seja:
+  # o plugin transformou a poda em vazamento contínuo.
+  #
+  # 86400 = 1x/dia. A janela de 1 semana continua sendo aplicada — só é
+  # verificada uma vez por dia, o que basta para deletar backup obsoleto. Custo
+  # cai de ~71.600 para ~257 requests/dia (0,5% da franquia).
+  #
+  # Não zerar nem remover a retention: sem ela o `base/` cresce sem limite e
+  # cada backup novo passa a listar TUDO (foi o incidente original, requests
+  # quadráticos). O problema nunca foi podar — foi podar 288x por dia.
+  instanceSidecarConfiguration:
+    retentionPolicyIntervalSeconds: 86400
