@@ -78,10 +78,19 @@ spec:
               repeat_interval: 4h
               receiver: telegram
               routes:
+                # Consumo rotineiro do Always Free não vai ao Telegram: o
+                # relatório das 22h já traz a mesma seção. Sem isso, cada
+                # alerta firing repete a cada 4h (repeat_interval) e vira
+                # ~12 mensagens/dia. Regex ancorado: NÃO pega SpendingHigh.
+                - matchers: ["alertname =~ \"AlwaysFree(Spending|ProjectedOverage)\""]
+                  receiver: none
                 - matchers: ["alertname = Watchdog"]
                   receiver: watchdog-heartbeat
                   repeat_interval: 24h # heartbeat diário = prova de vida do pipeline
             receivers:
+              # Sumidouro intencional: os dois alertas continuam visíveis
+              # no Prometheus/Grafana, só não notificam no Telegram.
+              - name: none
               - name: telegram
                 telegram_configs:
                   - bot_token_file: /etc/alertmanager/secrets/alertmanager-telegram/token
