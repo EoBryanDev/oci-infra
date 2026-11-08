@@ -78,6 +78,14 @@ spec:
               repeat_interval: 4h
               receiver: telegram
               routes:
+                # Alerta interno do kube-prometheus-stack: só serve para inibir
+                # alertas de severity=info. O default upstream o manda para um
+                # receiver nulo; sem isso ele cai no Telegram e oscila junto
+                # com CPUThrottlingHigh (info, for: 15m) — FIRING/RESOLVED a
+                # cada ciclo. A inibição continua: ela usa o estado do alerta,
+                # não a notificação.
+                - matchers: ["alertname = InfoInhibitor"]
+                  receiver: none
                 # Consumo rotineiro do Always Free não vai ao Telegram: o
                 # relatório das 22h já traz a mesma seção. Sem isso, cada
                 # alerta firing repete a cada 4h (repeat_interval) e vira
